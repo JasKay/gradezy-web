@@ -14,6 +14,7 @@ import {
   type ExpectedStudent,
   type ActualStudent,
 } from "@/lib/reconciliation";
+import { AppSidebar } from "@/components/app-sidebar";
 
 type Assessment = {
   id: string;
@@ -380,7 +381,8 @@ export default function IssuesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fafc]">
+    <main className="min-h-screen bg-[#f8fafc] lg:pl-64">
+      <AppSidebar assessment={assessment} />
       <div className="mx-auto max-w-6xl px-6 py-8">
         {/* Header */}
         <div className="flex items-start justify-between gap-6">

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AppSidebar } from "@/components/app-sidebar";
+import { saveAssessment } from "@/lib/assessment-store";
 
 export default function NewAssessmentPage() {
   const router = useRouter();
@@ -38,10 +40,7 @@ export default function NewAssessmentPage() {
       createdAt: new Date().toISOString(),
     };
 
-    localStorage.setItem(
-      "gradezy_current_assessment",
-      JSON.stringify(assessment)
-    );
+    saveAssessment(assessment);
 
     setTimeout(() => {
       router.push(`/assessments/${assessment.id}`);
@@ -49,7 +48,8 @@ export default function NewAssessmentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#070b12] text-white">
+    <main className="min-h-screen bg-[#070b12] text-white lg:pl-64">
+      <AppSidebar />
       <div className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
         {/* HEADER */}
         <div className="mb-10">

@@ -20,6 +20,7 @@ import {
   pingExtension,
   requestStudentsFromExtension,
 } from "@/lib/extension-communication";
+import { AppSidebar } from "@/components/app-sidebar";
 
 type Assessment = {
   id: string;
@@ -607,7 +608,8 @@ export default function ReconciliationPage() {
   const hasResults = reconciliationResults.length > 0;
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-white lg:pl-64">
+      {assessment && <AppSidebar assessment={assessment} />}
       <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
         <div className="mb-8">
           <button

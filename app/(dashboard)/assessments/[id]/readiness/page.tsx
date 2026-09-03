@@ -21,6 +21,7 @@ import {
   getCheckIcon,
   getCheckColor,
 } from "@/lib/readiness";
+import { saveAssessment } from "@/lib/assessment-store";
 
 type Assessment = {
   id: string;
@@ -216,10 +217,7 @@ export default function ReadinessPage() {
           readyAt: new Date().toISOString(),
         };
 
-        localStorage.setItem(
-          "gradezy_current_assessment",
-          JSON.stringify(updatedAssessment)
-        );
+        saveAssessment(updatedAssessment);
 
         setAssessment(updatedAssessment);
       }
