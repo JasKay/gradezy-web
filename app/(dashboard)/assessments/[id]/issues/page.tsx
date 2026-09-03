@@ -359,7 +359,7 @@ export default function IssuesPage() {
       <main className="min-h-screen bg-[#f8fafc] p-8">
         <div className="mx-auto max-w-3xl">
           <button
-            onClick={() => router.push("/app/assessments")}
+            onClick={() => router.push("/assessments")}
             className="text-sm font-medium text-slate-600 hover:text-slate-900"
           >
             ← Back to assessments
@@ -388,7 +388,7 @@ export default function IssuesPage() {
             <button
               onClick={() =>
                 router.push(
-                  `/app/assessments/${assessmentId}/reconciliation`
+                  `/assessments/${assessmentId}/reconciliation`
                 )
               }
               className="mb-5 text-sm font-medium text-slate-500 transition hover:text-slate-900"
@@ -420,7 +420,7 @@ export default function IssuesPage() {
           <button
             onClick={() =>
               router.push(
-                `/app/assessments/${assessmentId}/readiness`
+                `/assessments/${assessmentId}/readiness`
               )
             }
             className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
