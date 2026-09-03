@@ -1,86 +1,24 @@
-/**
- * Gradezy Extension - Background Service Worker
- * 
- * Manages extension lifecycle and communication with Gradezy app
- */
-
-// Listen for messages from content scripts and popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "sendToGradezy") {
-    // Forward extracted grades to the Gradezy app
-    sendToGradezApp(request.data, sender.url);
-    sendResponse({ success: true });
-  } else if (request.action === "getStoredData") {
-    // Retrieve stored assessment data
-    chrome.storage.local.get("currentAssessment", (result) => {
-      sendResponse(result);
-    });
-    return true; // Will respond asynchronously
-  }
-});
-
-/**
- * Send extracted grade data to the Gradezy app
- */
-function sendToGradezApp(data, sourceUrl) {
-  // Store the data in chrome storage
-  chrome.storage.local.set({
-    lastExtractedData: {
-      data,
-      sourceUrl,
-      timestamp: new Date().toISOString(),
-    },
-  });
-
-  // Try to send to Gradezy via messaging
-  chrome.tabs.query({ url: "http://localhost:3000/*" }, (tabs) => {
-    tabs.forEach((tab) => {
-      chrome.tabs.sendMessage(
-        tab.id,
-        {
-          action: "receiveGradesFromExtension",
-          data,
-          sourceUrl,
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            console.log("Could not reach Gradezy tab");
-          } else {
-            console.log("Sent grades to Gradezy:", response);
-          }
-        }
-      );
-    });
-  });
+/* Gradezy MV3 service worker: connects Gradezy web to StaffAdvantage tabs. */
+function activeStaffAdvantageTab() {
+  return new Promise((resolve) => chrome.tabs.query({ url: "https://staffadv.ncgrp.co.uk/*" }, (tabs) => {
+    const ordered = [...tabs].sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0));
+    resolve(ordered[0] || null);
+  }));
 }
-
-/**
- * Handle extension installation
- */
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === "install") {
-    // Open options page on first install
-    chrome.runtime.openOptionsPage();
-  }
+function sendToStaffAdvantage(action) {
+  return activeStaffAdvantageTab().then((tab) => new Promise((resolve) => {
+    if (!tab?.id) { resolve({ success: false, error: "Open the StaffAdvantage assessment page, then try again." }); return; }
+    chrome.tabs.sendMessage(tab.id, { action }, (response) => {
+      if (chrome.runtime.lastError) { resolve({ success: false, error: "Gradezy could not access the StaffAdvantage page. Refresh it and try again." }); return; }
+      resolve(response || { success: false, error: "No response from StaffAdvantage." });
+    });
+  }));
+}
+chrome.runtime.onMessageExternal.addListener((request, _sender, sendResponse) => {
+  if (request.action === "gradezyPing") { sendResponse({ success: true, data: { extension: "Gradezy", version: "1.2.0" } }); return; }
+  if (request.action === "readStaffAdvantageStudents" || request.action === "getStaffAdvantagePageInfo") { sendToStaffAdvantage(request.action).then(sendResponse); return true; }
+  sendResponse({ success: false, error: "Unsupported Gradezy request." });
 });
-
-/**
- * Listen for messages from the Gradezy web app
- */
-window.addEventListener("message", (event) => {
-  if (event.source !== window) return;
-
-  if (event.data.type && event.data.type === "GRADEZY_REQUEST") {
-    if (event.data.action === "extractGrades") {
-      // Forward to active content script
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        chrome.tabs.sendMessage(tabs[0].id, event.data, (response) => {
-          window.postMessage(
-            { type: "GRADEZY_RESPONSE", data: response },
-            "*"
-          );
-        });
-      });
-    }
-  }
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (["extractGrades", "extractStudents", "getPageInfo", "readStaffAdvantageStudents", "getStaffAdvantagePageInfo"].includes(request.action)) { sendToStaffAdvantage(request.action).then(sendResponse); return true; }
 });

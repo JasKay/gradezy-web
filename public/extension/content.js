@@ -1,263 +1,88 @@
-/**
- * Gradezy Extension - Content Script
- * 
- * Runs on assessment system pages (Canvas, Moodle, etc.)
- * Extracts grade data and makes it available to the extension
- */
-
-// Listen for messages from the popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "extractGrades") {
-    const grades = extractGradesFromPage();
-    sendResponse({ success: true, data: grades });
-  } else if (request.action === "extractStudents") {
-    const students = extractStudentsFromPage();
-    sendResponse({ success: true, data: students });
-  } else if (request.action === "getPageInfo") {
-    const info = getPageInfo();
-    sendResponse({ success: true, data: info });
-  }
-});
-
-/**
- * Extract grade data from the current page
- * Supports Canvas, Moodle, and other common assessment systems
- */
-function extractGradesFromPage() {
-  const grades = [];
-  
-  // Try Canvas LMS gradebook extraction
-  const canvasGrades = extractCanvasGrades();
-  if (canvasGrades.length > 0) {
-    return canvasGrades;
-  }
-
-  // Try Moodle grade extraction
-  const moodleGrades = extractMoodleGrades();
-  if (moodleGrades.length > 0) {
-    return moodleGrades;
-  }
-
-  // Try generic table extraction
-  const tableGrades = extractTableGrades();
-  if (tableGrades.length > 0) {
-    return tableGrades;
-  }
-
-  return [];
+/* Gradezy StaffAdvantage content script. */
+function clean(value) { return String(value ?? "").replace(/\s+/g, " ").trim(); }
+function normaliseId(value) { return clean(value).replace(/\s+/g, ""); }
+function cellValue(cell) {
+  if (!cell) return "";
+  const field = cell.querySelector("input, select, textarea");
+  return clean(field ? field.value : cell.innerText || cell.textContent);
 }
-
-/**
- * Extract grades from Canvas LMS gradebook
- */
-function extractCanvasGrades() {
-  const grades = [];
-
-  // Look for Canvas gradebook tables
-  const rows = document.querySelectorAll(
-    '[data-view-id="gradebook"] table tbody tr, [class*="StudentGradeRow"] tr'
-  );
-
-  rows.forEach((row) => {
-    const cells = row.querySelectorAll("td");
-    if (cells.length < 2) return;
-
-    // Try to extract student name and grade
-    const nameCell = cells[0];
-    const gradeCell = cells[cells.length - 1];
-
-    if (nameCell && gradeCell) {
-      const name = nameCell.textContent.trim();
-      const grade = gradeCell.textContent.trim();
-
-      if (name && grade && !isNaN(parseFloat(grade))) {
-        grades.push({
-          name,
-          grade: parseFloat(grade),
-          source: "Canvas",
-        });
-      }
-    }
+function headerKey(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " "); }
+function findStaffAdvantageTable() {
+  return [...document.querySelectorAll("table")].find((table) => {
+    const headings = headerKey(table.querySelector("thead")?.innerText || "");
+    return headings.includes("attempt") && headings.includes("percentage") && (headings.includes("student") || headings.includes("details"));
+  }) || null;
+}
+function columnMap(table) {
+  const map = {};
+  [...table.querySelectorAll("thead th, thead td")].forEach((header, index) => {
+    const label = headerKey(header.innerText || header.textContent);
+    if (label.includes("student") || label.includes("details")) map.details = index;
+    if (label.includes("attempt")) map.attempt = index;
+    if (label.includes("percentage") || label.includes("percent")) map.grade = index;
+    if (label.includes("true zero")) map.trueZero = index;
+    if (label === "late" || label.includes(" late")) map.late = index;
+    if (label.includes("dns")) map.dns = index;
+    if (label.includes("aap")) map.aap = index;
+    if (label.includes("mit")) map.mit = index;
+    if (label.includes("rpl")) map.rpl = index;
   });
-
-  return grades;
+  return map;
 }
-
-/**
- * Extract grades from Moodle gradebook
- */
-function extractMoodleGrades() {
-  const grades = [];
-
-  // Look for Moodle gradebook tables
-  const rows = document.querySelectorAll(
-    "table.gradebook_table tbody tr, .gradebook_table tr[data-user-id]"
-  );
-
-  rows.forEach((row) => {
-    const cells = row.querySelectorAll("td");
-    if (cells.length < 2) return;
-
-    // First cell typically has student name
-    const nameCell = cells[0];
-    // Last cell typically has final grade
-    const gradeCell = cells[cells.length - 1];
-
-    if (nameCell && gradeCell) {
-      const name = nameCell.textContent.trim();
-      const grade = gradeCell.textContent.trim();
-
-      // Extract numeric grade
-      const numericGrade = parseFloat(grade.replace(/[^\d.-]/g, ""));
-
-      if (name && !isNaN(numericGrade)) {
-        grades.push({
-          name,
-          grade: numericGrade,
-          source: "Moodle",
-        });
-      }
-    }
-  });
-
-  return grades;
+function parseStudentDetails(value, row) {
+  const text = clean(value);
+  const lines = String(value ?? "").split(/\n+/).map(clean).filter(Boolean);
+  const labelledId = text.match(/(?:ncg\s*(?:id|number)?|student\s*id)\s*[:#-]?\s*([a-z0-9-]{4,})/i);
+  const numericId = lines.find((line) => /^\d{4,}$/.test(line));
+  const ncgId = normaliseId(labelledId?.[1] || numericId || row.getAttribute("data-student-id") || row.dataset.studentId);
+  const nameLine = lines.find((line) => line !== numericId && !/^(?:ncg\s*)?(?:id|number)\b/i.test(line)) || "";
+  const commaName = nameLine.split(",").map(clean);
+  const nameParts = (commaName.length >= 2 ? `${commaName.slice(1).join(" ")} ${commaName[0]}` : nameLine)
+    .replace(/\b(?:ncg\s*)?(?:id|number)\b.*$/i, "").split(" ").filter(Boolean);
+  return { ncgId, firstName: nameParts.shift() || "", lastName: nameParts.join(" ") };
 }
-
-/**
- * Extract grades from generic HTML table
- * Fallback for unknown assessment systems
- */
-function extractTableGrades() {
-  const grades = [];
-
-  // Look for any table that might contain grades
-  const tables = document.querySelectorAll("table");
-
-  tables.forEach((table) => {
-    const rows = table.querySelectorAll("tbody tr, tr");
-    
-    rows.forEach((row) => {
-      const cells = row.querySelectorAll("td, th");
-      if (cells.length < 2) return;
-
-      // Look for columns with names and numeric values
-      const potentialNameCell = cells[0];
-      const potentialGradeCell = cells[cells.length - 1];
-
-      if (potentialNameCell && potentialGradeCell) {
-        const name = potentialNameCell.textContent.trim();
-        const gradeText = potentialGradeCell.textContent.trim();
-        const numericGrade = parseFloat(gradeText.replace(/[^\d.-]/g, ""));
-
-        // Only add if it looks like a real entry
-        if (
-          name.length > 2 &&
-          !isNaN(numericGrade) &&
-          numericGrade >= 0 &&
-          numericGrade <= 100
-        ) {
-          grades.push({
-            name,
-            grade: numericGrade,
-            source: "Table",
-          });
-        }
-      }
-    });
-  });
-
-  return grades;
+function isChecked(cells, index) {
+  const cell = cells[index];
+  if (!cell) return false;
+  const control = cell.querySelector("input[type=checkbox]");
+  return Boolean(control?.checked || /^(?:yes|true|y|1)$/i.test(cellValue(cell)));
 }
-
-/**
- * Extract student list from the page
- */
-function extractStudentsFromPage() {
-  const students = [];
-
-  // Try Canvas
-  const canvasStudents = extractCanvasStudents();
-  if (canvasStudents.length > 0) return canvasStudents;
-
-  // Try Moodle
-  const moodleStudents = extractMoodleStudents();
-  if (moodleStudents.length > 0) return moodleStudents;
-
-  return students;
+function extractStaffAdvantageStudents() {
+  const table = findStaffAdvantageTable();
+  if (!table) return [];
+  const columns = columnMap(table);
+  if (columns.details === undefined || columns.grade === undefined) return [];
+  const seen = new Set();
+  return [...table.querySelectorAll("tbody tr")].map((row) => {
+    const cells = [...row.querySelectorAll(":scope > td")];
+    if (cells.length <= Math.max(columns.details, columns.grade)) return null;
+    const student = parseStudentDetails(cellValue(cells[columns.details]), row);
+    const key = `${student.ncgId}|${student.firstName}|${student.lastName}|${cellValue(cells[columns.attempt])}`.toLowerCase();
+    if ((!student.ncgId && !student.firstName && !student.lastName) || seen.has(key)) return null;
+    seen.add(key);
+    return {
+      ...student, grade: cellValue(cells[columns.grade]), source: "StaffAdvantage",
+      attemptNumber: cellValue(cells[columns.attempt]),
+      flags: {
+        trueZero: isChecked(cells, columns.trueZero), late: isChecked(cells, columns.late),
+        dns: isChecked(cells, columns.dns), aap: isChecked(cells, columns.aap),
+        mit: isChecked(cells, columns.mit), rpl: isChecked(cells, columns.rpl),
+      },
+    };
+  }).filter(Boolean);
 }
-
-/**
- * Extract students from Canvas
- */
-function extractCanvasStudents() {
-  const students = [];
-  const rows = document.querySelectorAll('[data-view-id="gradebook"] table tbody tr');
-
-  rows.forEach((row) => {
-    const nameCell = row.querySelector("td");
-    if (nameCell) {
-      const name = nameCell.textContent.trim();
-      if (name && name.length > 2) {
-        students.push({ name });
-      }
-    }
-  });
-
-  return students;
-}
-
-/**
- * Extract students from Moodle
- */
-function extractMoodleStudents() {
-  const students = [];
-  const rows = document.querySelectorAll("table.gradebook_table tbody tr");
-
-  rows.forEach((row) => {
-    const nameCell = row.querySelector("td");
-    if (nameCell) {
-      const name = nameCell.textContent.trim();
-      if (name && name.length > 2) {
-        students.push({ name });
-      }
-    }
-  });
-
-  return students;
-}
-
-/**
- * Get information about the current page
- */
 function getPageInfo() {
-  const url = window.location.href;
-  const title = document.title;
-
-  // Detect assessment system type
-  let systemType = "unknown";
-  if (url.includes("canvas")) {
-    systemType = "Canvas";
-  } else if (url.includes("moodle")) {
-    systemType = "Moodle";
+  const students = extractStaffAdvantageStudents();
+  return { url: location.href, title: document.title, hostname: location.hostname, source: "StaffAdvantage", studentCount: students.length };
+}
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action === "readStaffAdvantageStudents" || request.action === "extractStudents") {
+    const students = extractStaffAdvantageStudents();
+    sendResponse({ success: true, data: { students, count: students.length } }); return;
   }
-
-  return {
-    url,
-    title,
-    systemType,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// Optionally inject a script to extract data from protected contexts
-function injectExtractionScript() {
-  const script = document.createElement("script");
-  script.src = chrome.runtime.getURL("injected.js");
-  script.onload = function () {
-    this.remove();
-  };
-  (document.head || document.documentElement).appendChild(script);
-}
-
-// Inject on page load if needed for deeper access
-injectExtractionScript();
+  if (request.action === "extractGrades") {
+    const grades = extractStaffAdvantageStudents().map((student) => ({ name: clean(`${student.firstName} ${student.lastName}`), grade: Number.parseFloat(student.grade), source: "StaffAdvantage" })).filter((student) => Number.isFinite(student.grade));
+    sendResponse({ success: true, data: grades }); return;
+  }
+  if (request.action === "getStaffAdvantagePageInfo" || request.action === "getPageInfo") sendResponse({ success: true, data: getPageInfo() });
+});
