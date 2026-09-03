@@ -98,18 +98,87 @@ export type ExtensionResponse<T> = {
 };
 
 /**
+ * Minimal Chrome runtime types needed by Gradezy.
+ *
+ * We define only what this web app actually uses instead
+ * of requiring the full Chrome extension type package.
+ */
+type ChromeRuntime = {
+  sendMessage: (
+    extensionId: string,
+    message: ExtensionMessage,
+    callback: (
+      response: ExtensionResponse<unknown> | undefined
+    ) => void
+  ) => void;
+
+  lastError?: {
+    message?: string;
+  };
+
+  onMessage?: {
+    addListener: (
+      listener: (
+        request: {
+          action?: string;
+          data?: unknown;
+          sourceUrl?: string;
+        },
+        sender: unknown,
+        sendResponse: (
+          response: ExtensionResponse<unknown>
+        ) => void
+      ) => void
+    ) => void;
+
+    removeListener: (
+      listener: (
+        request: {
+          action?: string;
+          data?: unknown;
+          sourceUrl?: string;
+        },
+        sender: unknown,
+        sendResponse: (
+          response: ExtensionResponse<unknown>
+        ) => void
+      ) => void
+    ) => void;
+  };
+};
+
+type ChromeLike = {
+  runtime?: ChromeRuntime;
+};
+
+/**
+ * Safely access the browser's extension runtime.
+ *
+ * The Gradezy website runs in a normal browser page, so
+ * Chrome/Edge extension APIs are not guaranteed to exist.
+ */
+function getChromeRuntime(): ChromeRuntime | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const browserWindow = window as Window & {
+    chrome?: ChromeLike;
+  };
+
+  return browserWindow.chrome?.runtime ?? null;
+}
+
+/**
  * Check whether the browser supports the extension
  * messaging API.
  */
 function canUseExtensionMessaging(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
+  const runtime = getChromeRuntime();
 
   return (
-    typeof window.chrome !== "undefined" &&
-    typeof window.chrome.runtime !== "undefined" &&
-    typeof window.chrome.runtime.sendMessage === "function"
+    runtime !== null &&
+    typeof runtime.sendMessage === "function"
   );
 }
 
@@ -126,7 +195,12 @@ export async function sendToExtension<
   message: ExtensionMessage
 ): Promise<ExtensionResponse<T>> {
   return new Promise((resolve, reject) => {
-    if (!canUseExtensionMessaging()) {
+    const runtime = getChromeRuntime();
+
+    if (
+      !runtime ||
+      typeof runtime.sendMessage !== "function"
+    ) {
       reject(
         new Error(
           "Browser extension messaging is not available."
@@ -137,14 +211,15 @@ export async function sendToExtension<
     }
 
     try {
-      window.chrome.runtime.sendMessage(
+      runtime.sendMessage(
         GRADEZY_EXTENSION_ID,
         message,
         (
-          response: ExtensionResponse<T> | undefined
+          response:
+            | ExtensionResponse<unknown>
+            | undefined
         ) => {
-          const runtimeError =
-            window.chrome.runtime.lastError;
+          const runtimeError = runtime.lastError;
 
           if (runtimeError) {
             reject(
@@ -167,7 +242,9 @@ export async function sendToExtension<
             return;
           }
 
-          resolve(response);
+          resolve(
+            response as ExtensionResponse<T>
+          );
         }
       );
     } catch (error) {
@@ -299,8 +376,7 @@ export async function sendGradesToAssessment(
   try {
     const response =
       await sendToExtension({
-        action:
-          "sendGradesToAssessment",
+        action: "sendGradesToAssessment",
         payload: {
           assessmentId,
           grades,
@@ -331,9 +407,11 @@ export function listenForExtensionMessages(
     message: ExtensionIncomingMessage
   ) => void
 ): () => void {
+  const runtime = getChromeRuntime();
+
   if (
-    typeof window === "undefined" ||
-    !window.chrome?.runtime?.onMessage
+    !runtime ||
+    !runtime.onMessage
   ) {
     return () => {};
   }
@@ -395,12 +473,10 @@ export function listenForExtensionMessages(
         type: "pageInfoReceived",
         data:
           request.data &&
-          typeof request.data ===
-            "object"
+          typeof request.data === "object"
             ? (request.data as ExtensionPageInfo)
             : {},
-        sourceUrl:
-          request.sourceUrl,
+        sourceUrl: request.sourceUrl,
       });
 
       sendResponse({
@@ -412,19 +488,14 @@ export function listenForExtensionMessages(
 
     sendResponse({
       success: false,
-      error:
-        "Unknown extension message.",
+      error: "Unknown extension message.",
     });
   };
 
-  window.chrome.runtime.onMessage.addListener(
-    listener
-  );
+  runtime.onMessage.addListener(listener);
 
   return () => {
-    window.chrome.runtime.onMessage.removeListener(
-      listener
-    );
+    runtime.onMessage?.removeListener(listener);
   };
 }
 
