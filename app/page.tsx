@@ -103,10 +103,10 @@ export default function Home() {
 
           <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
             <a
-              href="#early-access"
+              href="/login"
               className="rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-[#070b12] transition hover:bg-slate-200"
             >
-              Get early access →
+              Sign in →
             </a>
 
             <a

@@ -23,13 +23,15 @@ export function AppSidebar({ assessment }: { assessment?: { id: string; name: st
         <nav className="flex-1 px-4 py-6">
           <p className="px-3 pb-3 text-xs font-semibold uppercase tracking-[0.15em] text-slate-600">Workspace</p>
           <div className="space-y-1">
-            <SidebarLink href="/dashboard" active={isActive("/dashboard")}>Dashboard</SidebarLink>
-            <SidebarLink href="/assessments" active={pathname === "/assessments" || pathname === "/assessments/new"}>Assessments</SidebarLink>
+            <SidebarLink href="/dashboard" active={isActive("/dashboard")} icon="▦">Dashboard</SidebarLink>
+            <SidebarLink href="/assessments" active={pathname === "/assessments" || pathname === "/assessments/new"} icon="□">Assessments</SidebarLink>
+            <SidebarLink href="/issues" active={isActive("/issues")} icon="!">Issues</SidebarLink>
+            <SidebarLink href="/settings" active={isActive("/settings")} icon="⚙">Settings</SidebarLink>
           </div>
           {assessment && <>
             <p className="mt-9 px-3 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-600">Current assessment</p>
             <p className="mb-3 px-3 text-sm font-medium text-slate-300">{assessment.module}</p>
-            <div className="space-y-1">{assessmentLinks.map(([label, href]) => <SidebarLink key={href} href={href} active={isActive(href)}>{label}</SidebarLink>)}</div>
+            <div className="space-y-1">{assessmentLinks.map(([label, href]) => <SidebarLink key={href} href={href} active={isActive(href)} icon="→">{label}</SidebarLink>)}</div>
           </>}
         </nav>
         <div className="border-t border-white/10 p-4 text-xs text-slate-500">Assessment Team<br /><span className="text-slate-600">Gradezy workspace</span></div>
@@ -38,6 +40,6 @@ export function AppSidebar({ assessment }: { assessment?: { id: string; name: st
   );
 }
 
-function SidebarLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
-  return <Link href={href} className={`block rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-white/10 text-white" : "text-slate-500 hover:bg-white/5 hover:text-white"}`}>{children}</Link>;
+function SidebarLink({ href, active, icon, children }: { href: string; active: boolean; icon: string; children: React.ReactNode }) {
+  return <Link href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-white/10 text-white" : "text-slate-500 hover:bg-white/5 hover:text-white"}`}><span className="flex h-5 w-5 items-center justify-center text-sm">{icon}</span>{children}</Link>;
 }
