@@ -163,7 +163,25 @@ export function generateIssuesFromReconciliation(
         break;
 
       case "matched":
-        // No issue should be generated for a successfully matched student.
+        if (
+          result.expectedStudent &&
+          result.actualStudents[0] &&
+          result.expectedStudent.grade.trim() &&
+          result.actualStudents[0].grade?.trim() &&
+          result.expectedStudent.grade.trim().toLowerCase() !==
+            result.actualStudents[0].grade.trim().toLowerCase()
+        ) {
+          issues.push({
+            id: `grade-mismatch-${result.id}`,
+            type: "missing_grade",
+            severity: "warning",
+            title: `Grade mismatch for ${result.expectedStudent.ncgId}`,
+            description: `Expected grade ${result.expectedStudent.grade} but the assessment system shows ${result.actualStudents[0].grade}.`,
+            expectedStudentNcgId: result.expectedStudent.ncgId,
+            actualStudentNcgId: result.actualStudents[0].ncgId,
+            ...baseIssue,
+          });
+        }
         break;
     }
   }

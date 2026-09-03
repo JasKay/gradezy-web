@@ -363,7 +363,7 @@ export default function AssessmentWorkspace() {
 
           <div className="border-b border-white/10 px-5 py-5">
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/dashboard")}
               className="text-sm text-slate-500 transition hover:text-white"
             >
               ← Dashboard
@@ -381,9 +381,18 @@ export default function AssessmentWorkspace() {
           <nav className="flex-1 px-4 py-6">
             <WorkspaceNav active label="Overview" />
             <WorkspaceNav label="Students" />
-            <WorkspaceNav label="Reconciliation" />
-            <WorkspaceNav label="Issues" />
-            <WorkspaceNav label="Readiness" />
+            <WorkspaceNav
+              label="Reconciliation"
+              href={`/assessments/${assessment.id}/reconciliation`}
+            />
+            <WorkspaceNav
+              label="Issues"
+              href={`/assessments/${assessment.id}/issues`}
+            />
+            <WorkspaceNav
+              label="Readiness"
+              href={`/assessments/${assessment.id}/readiness`}
+            />
           </nav>
         </div>
       </aside>
@@ -1002,12 +1011,15 @@ function normalizeValue(value: unknown) {
 function WorkspaceNav({
   label,
   active = false,
+  href,
 }: {
   label: string;
   active?: boolean;
+  href?: string;
 }) {
   return (
     <button
+      onClick={() => href && window.location.assign(href)}
       className={`mb-1 w-full rounded-xl px-3 py-2.5 text-left text-sm transition ${
         active
           ? "bg-white/10 text-white"

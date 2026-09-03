@@ -54,7 +54,7 @@ export default function NewAssessmentPage() {
         {/* HEADER */}
         <div className="mb-10">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/dashboard")}
             className="mb-6 text-sm text-slate-500 transition hover:text-white"
           >
             ← Back to dashboard

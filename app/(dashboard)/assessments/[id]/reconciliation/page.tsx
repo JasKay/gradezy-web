@@ -16,6 +16,10 @@ import {
   generateIssuesFromReconciliation,
   type Issue,
 } from "@/lib/issues";
+import {
+  pingExtension,
+  requestStudentsFromExtension,
+} from "@/lib/extension-communication";
 
 type Assessment = {
   id: string;
@@ -155,6 +159,9 @@ export default function ReconciliationPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [extensionState, setExtensionState] = useState<
+    "checking" | "available" | "unavailable"
+  >("checking");
   const [error, setError] = useState("");
 
   const [reconciliationResults, setReconciliationResults] = useState<
@@ -265,6 +272,18 @@ export default function ReconciliationPage() {
       // Ignore invalid stored reconciliation data.
     }
   }, [assessmentId, expectedStudents]);
+
+  useEffect(() => {
+    let active = true;
+
+    pingExtension().then((available) => {
+      if (active) setExtensionState(available ? "available" : "unavailable");
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -377,6 +396,29 @@ export default function ReconciliationPage() {
     }
   };
 
+  const handleExtensionImport = async () => {
+    setIsProcessing(true);
+    setError("");
+
+    try {
+      const students = await requestStudentsFromExtension();
+
+      if (!students.length) {
+        throw new Error("No student records were found on the open StaffAdvantage page.");
+      }
+
+      runReconciliation(students);
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Could not import records from StaffAdvantage."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const updateManualRow = (
     index: number,
     field: keyof Student,
@@ -471,7 +513,7 @@ export default function ReconciliationPage() {
     const calculated = calculateSummary(reconciliationResults);
 
     return {
-      total: calculated.totalExpected,
+      total: calculated.total,
       matched: calculated.matched,
       missing: calculated.missing,
       unexpected: calculated.unexpected,
@@ -487,7 +529,7 @@ export default function ReconciliationPage() {
 
       return !gradesMatch(
         result.expectedStudent?.grade ?? "",
-        result.actualStudent?.grade ?? ""
+        result.actualStudents[0]?.grade ?? ""
       );
     }).length;
   }, [reconciliationResults]);
@@ -500,34 +542,7 @@ export default function ReconciliationPage() {
       reconciliationResults
     );
 
-    const gradeMismatchIssues: Issue[] = reconciliationResults
-      .filter((result) => {
-        if (result.status !== "matched") return false;
-
-        return !gradesMatch(
-          result.expectedStudent?.grade ?? "",
-          result.actualStudent?.grade ?? ""
-        );
-      })
-      .map((result) => ({
-        id: `grade-mismatch-${result.id}`,
-        assessmentId,
-        type: "missing_grade" as const,
-        severity: "warning" as const,
-        status: "open" as const,
-        title: "Grade mismatch",
-        description: `Expected grade ${
-          result.expectedStudent?.grade || "—"
-        } but assessment system shows ${
-          result.actualStudent?.grade || "—"
-        }.`,
-        reconciliationResultId: result.id,
-        expectedStudentNcgId: result.expectedStudent?.ncgId,
-        actualStudentNcgId: result.actualStudent?.ncgId,
-        createdAt: new Date().toISOString(),
-      }));
-
-    return [...generatedIssues, ...gradeMismatchIssues];
+    return generatedIssues;
   }, [assessmentId, reconciliationResults]);
 
   const filteredResults = useMemo(() => {
@@ -539,7 +554,7 @@ export default function ReconciliationPage() {
           result.status === "matched" &&
           !gradesMatch(
             result.expectedStudent?.grade ?? "",
-            result.actualStudent?.grade ?? ""
+            result.actualStudents[0]?.grade ?? ""
           )
         );
       }
@@ -621,7 +636,7 @@ export default function ReconciliationPage() {
             {hasResults && (
               <button
                 onClick={() =>
-                  router.push(`/app/assessments/${assessmentId}/issues`)
+                  router.push(`/assessments/${assessmentId}/issues`)
                 }
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
@@ -763,10 +778,15 @@ export default function ReconciliationPage() {
 
                     <button
                       type="button"
-                      disabled
-                      className="mt-4 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-400"
+                      onClick={handleExtensionImport}
+                      disabled={isProcessing || extensionState !== "available"}
+                      className="mt-4 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                     >
-                      Connect extension — coming soon
+                      {extensionState === "checking"
+                        ? "Checking for extension..."
+                        : extensionState === "available"
+                          ? "Connect StaffAdvantage"
+                          : "Extension not detected"}
                     </button>
                   </div>
                 )}
@@ -1238,15 +1258,16 @@ export default function ReconciliationPage() {
                         ? `${result.expectedStudent.firstName} ${result.expectedStudent.lastName}`.trim()
                         : "—";
 
-                      const actualName = result.actualStudent
-                        ? `${result.actualStudent.firstName} ${result.actualStudent.lastName}`.trim()
+                      const actualStudent = result.actualStudents[0];
+                      const actualName = actualStudent
+                        ? `${actualStudent.firstName} ${actualStudent.lastName}`.trim()
                         : "—";
 
                       const isGradeMismatch =
                         result.status === "matched" &&
                         !gradesMatch(
                           result.expectedStudent?.grade ?? "",
-                          result.actualStudent?.grade ?? ""
+                          actualStudent?.grade ?? ""
                         );
 
                       return (
@@ -1268,7 +1289,7 @@ export default function ReconciliationPage() {
 
                           <td className="px-6 py-4 text-sm text-slate-600">
                             {result.expectedStudent?.ncgId ||
-                              result.actualStudent?.ncgId ||
+                              actualStudent?.ncgId ||
                               "—"}
                           </td>
 
@@ -1288,7 +1309,7 @@ export default function ReconciliationPage() {
                                   : "text-slate-600"
                               }
                             >
-                              {result.actualStudent?.grade || "—"}
+                              {actualStudent?.grade || "—"}
                             </span>
                           </td>
 
@@ -1337,7 +1358,7 @@ export default function ReconciliationPage() {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() =>
-                    router.push(`/app/assessments/${assessmentId}/issues`)
+                    router.push(`/assessments/${assessmentId}/issues`)
                   }
                   className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
@@ -1346,7 +1367,7 @@ export default function ReconciliationPage() {
 
                 <button
                   onClick={() =>
-                    router.push(`/app/assessments/${assessmentId}/readiness`)
+                    router.push(`/assessments/${assessmentId}/readiness`)
                   }
                   className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >

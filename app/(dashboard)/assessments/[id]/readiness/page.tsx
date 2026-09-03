@@ -224,7 +224,7 @@ export default function ReadinessPage() {
         setAssessment(updatedAssessment);
       }
 
-      router.push("/app/assessments");
+      router.push("/assessments");
     } catch (error) {
       console.error(
         "Failed to publish assessment:",
@@ -253,7 +253,7 @@ export default function ReadinessPage() {
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
           <button
             onClick={() =>
-              router.push("/app/assessments")
+              router.push("/assessments")
             }
             className="mb-6 text-sm text-slate-500 transition hover:text-white"
           >
@@ -283,7 +283,7 @@ export default function ReadinessPage() {
           <button
             onClick={() =>
               router.push(
-                `/app/assessments/${assessment.id}/reconciliation`
+                `/assessments/${assessment.id}/reconciliation`
               )
             }
             className="mb-6 text-sm text-slate-500 transition hover:text-white"
@@ -325,7 +325,7 @@ export default function ReadinessPage() {
           <div className="border-b border-white/10 px-5 py-5">
             <button
               onClick={() =>
-                router.push("/app/assessments")
+                router.push("/assessments")
               }
               className="text-sm text-slate-500 transition hover:text-white"
             >
@@ -348,17 +348,17 @@ export default function ReadinessPage() {
           <nav className="flex-1 px-4 py-6">
             <NavItem
               label="Overview"
-              href={`/app/assessments/${assessment.id}`}
+              href={`/assessments/${assessment.id}`}
             />
 
             <NavItem
               label="Reconciliation"
-              href={`/app/assessments/${assessment.id}/reconciliation`}
+              href={`/assessments/${assessment.id}/reconciliation`}
             />
 
             <NavItem
               label="Issues"
-              href={`/app/assessments/${assessment.id}/issues`}
+              href={`/assessments/${assessment.id}/issues`}
             />
 
             <NavItem
@@ -386,7 +386,7 @@ export default function ReadinessPage() {
           <button
             onClick={() =>
               router.push(
-                `/app/assessments/${assessment.id}/issues`
+                `/assessments/${assessment.id}/issues`
               )
             }
             className="hidden rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white sm:block"
@@ -554,7 +554,7 @@ export default function ReadinessPage() {
                     <button
                       onClick={() =>
                         router.push(
-                          `/app/assessments/${assessment.id}/issues`
+                          `/assessments/${assessment.id}/issues`
                         )
                       }
                       className="mt-4 rounded-full border border-red-400/30 bg-red-400/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-400/15"
@@ -615,7 +615,7 @@ export default function ReadinessPage() {
               <button
                 onClick={() =>
                   router.push(
-                    `/app/assessments/${assessment.id}/issues`
+                    `/assessments/${assessment.id}/issues`
                   )
                 }
                 className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#070b12] transition hover:bg-slate-200"
