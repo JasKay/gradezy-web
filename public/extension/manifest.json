@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Gradezy Assessment Assistant",
+  "version": "0.1.0",
+  "description": "Extract grades and student data from assessment systems directly into Gradezy",
+  "permissions": [
+    "scripting",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.instructure.com/*",
+    "https://*.moodle.org/*",
+    "https://*.moodle.com/*",
+    "*://*/",
+    "https://*/"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.instructure.com/*",
+        "https://*.moodle.org/*",
+        "https://*.moodle.com/*",
+        "https://canvas.*/",
+        "https://*/moodle/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gradezy Assessment Assistant"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://*/*"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

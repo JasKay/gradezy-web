@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gradezy Assessment Assistant</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        width: 420px;
+        background: #070b12;
+        color: #f0f0f0;
+      }
+
+      .container {
+        padding: 16px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .logo {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #fff;
+        color: #070b12;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 18px;
+      }
+
+      h1 {
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .subtitle {
+        font-size: 12px;
+        color: #8b8b8b;
+        margin-top: 4px;
+      }
+
+      .section {
+        margin-bottom: 24px;
+      }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: #6366f1;
+        margin-bottom: 12px;
+      }
+
+      .info-box {
+        background: rgba(13, 19, 29, 1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .info-label {
+        color: #8b8b8b;
+        font-size: 11px;
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      .info-value {
+        color: #f0f0f0;
+        font-family: monospace;
+        font-size: 12px;
+        word-break: break-all;
+      }
+
+      .button {
+        width: 100%;
+        padding: 10px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 8px;
+      }
+
+      .button-primary {
+        background: #fff;
+        color: #070b12;
+      }
+
+      .button-primary:hover {
+        background: #e0e0e0;
+      }
+
+      .button-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #f0f0f0;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .button-secondary:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      .button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        margin-bottom: 12px;
+      }
+
+      .status.success {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        color: #10b981;
+      }
+
+      .status.error {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+      }
+
+      .status.info {
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        color: #6366f1;
+      }
+
+      .status-icon {
+        font-size: 14px;
+      }
+
+      .grades-list {
+        max-height: 200px;
+        overflow-y: auto;
+        background: rgba(13, 19, 29, 1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      .grade-item {
+        padding: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .grade-item:last-child {
+        border-bottom: none;
+      }
+
+      .grade-name {
+        color: #f0f0f0;
+      }
+
+      .grade-value {
+        color: #6366f1;
+        font-weight: 600;
+      }
+
+      .link {
+        color: #6366f1;
+        text-decoration: none;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .link:hover {
+        text-decoration: underline;
+      }
+
+      .footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 12px;
+        margin-top: 20px;
+        text-align: center;
+        font-size: 11px;
+        color: #8b8b8b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header>
+        <div class="logo">G</div>
+        <div>
+          <h1>Gradezy</h1>
+          <p class="subtitle">Assessment Assistant</p>
+        </div>
+      </header>
+
+      <!-- Page Info -->
+      <div class="section">
+        <div class="section-title">Current Page</div>
+        <div class="info-box">
+          <div class="info-label">System</div>
+          <div class="info-value" id="systemType">Detecting...</div>
+        </div>
+        <div class="info-box">
+          <div class="info-label">Title</div>
+          <div class="info-value" id="pageTitle">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="section" id="statusSection"></div>
+
+      <!-- Grades Preview -->
+      <div class="section" id="gradesSection" style="display: none">
+        <div class="section-title">Grades Found</div>
+        <div class="grades-list" id="gradesList"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="section">
+        <button class="button button-primary" id="extractBtn">
+          Extract Grades
+        </button>
+        <button class="button button-secondary" id="sendBtn" disabled>
+          Send to Gradezy
+        </button>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p>v0.1.0 • <span class="link" id="openOptions">Settings</span></p>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
