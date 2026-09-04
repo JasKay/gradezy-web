@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 
@@ -52,95 +52,55 @@ type FilterType =
   | "grade_mismatch"
   | "unexpected";
 
-function normalizeHeader(value: unknown): string {
+function normalizeHeader(value: unknown) {
   return String(value ?? "")
     .trim()
     .toLowerCase()
-    .replace(/[\s_-]+/g, "");
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
 }
 
-function normalizeValue(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ");
+function normalizeValue(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function getValue(
   row: Record<string, unknown>,
-  headers: string[]
-): string {
-  const normalizedEntries = Object.entries(row).map(
-    ([key, value]) => ({
-      key: normalizeHeader(key),
-      value,
-    })
+  headers: string[],
+) {
+  const entry = Object.entries(row).find(([key]) =>
+    headers.includes(normalizeHeader(key)),
   );
 
-  for (const header of headers) {
-    const normalizedHeader = normalizeHeader(header);
-
-    const found = normalizedEntries.find(
-      (entry) => entry.key === normalizedHeader
-    );
-
-    if (found) {
-      return normalizeValue(found.value);
-    }
-  }
-
-  return "";
+  return entry ? entry[1] : "";
 }
 
-function normalizeGrade(value: unknown): string {
-  const raw = normalizeValue(value);
-
-  if (!raw) {
-    return "";
-  }
-
-  const numeric = Number(
-    raw.replace("%", "").replace(",", "")
-  );
-
-  if (Number.isFinite(numeric)) {
-    return String(numeric);
-  }
-
-  return raw.toLowerCase();
+function normalizeGrade(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/%/g, "")
+    .replace(",", ".");
 }
 
-function gradesMatch(
-  expectedGrade: string,
-  actualGrade: string
-): boolean {
-  const expected = normalizeGrade(expectedGrade);
-  const actual = normalizeGrade(actualGrade);
-
-  if (!expected || !actual) {
-    return false;
-  }
-
-  if (expected === actual) {
-    return true;
-  }
-
-  const expectedNumber = Number(expected);
-  const actualNumber = Number(actual);
+function gradesMatch(expected: string, actual: string) {
+  const expectedNumber = Number(normalizeGrade(expected));
+  const actualNumber = Number(normalizeGrade(actual));
 
   if (
     Number.isFinite(expectedNumber) &&
     Number.isFinite(actualNumber)
   ) {
-    return Math.abs(expectedNumber - actualNumber) < 0.01;
+    return expectedNumber === actualNumber;
   }
 
-  return false;
+  return (
+    normalizeGrade(expected).toLowerCase() ===
+    normalizeGrade(actual).toLowerCase()
+  );
 }
 
-function getStatusLabel(
-  status: ReconciliationResult["status"]
-): string {
-  switch (status) {
+function getStatusLabel(result: ReconciliationResult) {
+  switch (result.status) {
     case "matched":
       return "Matched";
     case "missing":
@@ -152,27 +112,21 @@ function getStatusLabel(
     case "unexpected":
       return "Unexpected";
     default:
-      return status;
+      return result.status;
   }
 }
 
-function getStatusClasses(
-  status: ReconciliationResult["status"]
-): string {
-  switch (status) {
+function getStatusClasses(result: ReconciliationResult) {
+  switch (result.status) {
     case "matched":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
     case "missing":
       return "border-red-200 bg-red-50 text-red-700";
-
     case "name_mismatch":
     case "grade_mismatch":
       return "border-amber-200 bg-amber-50 text-amber-700";
-
     case "unexpected":
       return "border-slate-200 bg-slate-50 text-slate-600";
-
     default:
       return "border-slate-200 bg-slate-50 text-slate-600";
   }
@@ -197,25 +151,21 @@ export default function ReconciliationPage() {
     useState<EntryMethod | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const [isProcessing, setIsProcessing] =
-    useState(false);
-
-  const [extensionState, setExtensionState] =
-    useState<
-      "checking" | "connected" | "not-installed"
-    >("checking");
+  const [extensionState, setExtensionState] = useState<
+    "checking" | "connected" | "not-installed"
+  >("checking");
 
   const [extensionVersion, setExtensionVersion] =
-    useState<string | null>(null);
+    useState<string | undefined>();
 
   const [error, setError] = useState("");
 
   const [reconciliationResults, setReconciliationResults] =
     useState<ReconciliationResult[]>([]);
 
-  const [filter, setFilter] =
-    useState<FilterType>("all");
+  const [filter, setFilter] = useState<FilterType>("all");
 
   const [manualRows, setManualRows] = useState<Student[]>([
     {
@@ -226,175 +176,119 @@ export default function ReconciliationPage() {
     },
   ]);
 
-  /*
-   * Load assessment and expected students.
-   */
-  useEffect(() => {
-    try {
-      const storedAssessment =
-        localStorage.getItem(
-          "gradezy_current_assessment"
-        );
-
-      if (!storedAssessment) {
-        router.push("/assessments");
-        return;
-      }
-
-      const parsedAssessment =
-        JSON.parse(storedAssessment) as Assessment;
-
-      if (parsedAssessment.id !== assessmentId) {
-        router.push("/assessments");
-        return;
-      }
-
-      setAssessment(parsedAssessment);
-
-      const storedStudents =
-        localStorage.getItem(
-          `gradezy_students_${assessmentId}`
-        );
-
-      if (storedStudents) {
-        const parsedStudents =
-          JSON.parse(storedStudents) as Student[];
-
-        setExpectedStudents(parsedStudents);
-      }
-    } catch {
-      setError(
-        "Could not load this assessment."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [assessmentId, router]);
-
-  /*
-   * Restore actual students already imported for this assessment.
-   */
-  useEffect(() => {
-    if (!assessmentId) {
-      return;
-    }
+  const checkExtension = async () => {
+    setExtensionState("checking");
 
     try {
-      const storedActualStudents =
-        localStorage.getItem(
-          `gradezy_actual_students_${assessmentId}`
-        );
-
-      if (!storedActualStudents) {
-        return;
-      }
-
-      const parsedActualStudents =
-        JSON.parse(
-          storedActualStudents
-        ) as ActualStudent[];
-
-      if (!parsedActualStudents.length) {
-        return;
-      }
-
-      setActualStudents(parsedActualStudents);
-
-      if (expectedStudents.length) {
-        const results = reconcileStudents(
-          expectedStudents as ExpectedStudent[],
-          parsedActualStudents
-        );
-
-        setReconciliationResults(results);
-      }
-    } catch {
-      // Ignore malformed saved data.
-    }
-  }, [assessmentId, expectedStudents]);
-
-  /*
-   * Check whether the actual Gradezy extension responds.
-   *
-   * We also re-check whenever the user comes back to this tab.
-   * This makes the install flow much smoother:
-   *
-   * Gradezy → Get Extension → install → return to Gradezy
-   * → Gradezy detects the extension automatically.
-   */
-  useEffect(() => {
-    let active = true;
-
-    const checkExtension = async () => {
-      if (!active) {
-        return;
-      }
-
-      setExtensionState("checking");
-
       const result = await pingExtension();
-
-      if (!active) {
-        return;
-      }
 
       if (result.available) {
         setExtensionState("connected");
-        setExtensionVersion(
-          result.version ?? null
-        );
+        setExtensionVersion(result.version);
       } else {
         setExtensionState("not-installed");
-        setExtensionVersion(null);
+        setExtensionVersion(undefined);
+      }
+    } catch {
+      setExtensionState("not-installed");
+      setExtensionVersion(undefined);
+    }
+  };
+
+  useEffect(() => {
+    const loadAssessment = () => {
+      try {
+        const storedAssessment =
+          localStorage.getItem("gradezy_current_assessment");
+
+        if (storedAssessment) {
+          const parsed = JSON.parse(storedAssessment);
+
+          if (parsed?.id === assessmentId) {
+            setAssessment(parsed);
+          }
+        }
+
+        const storedStudents = localStorage.getItem(
+          `gradezy_students_${assessmentId}`,
+        );
+
+        if (storedStudents) {
+          setExpectedStudents(JSON.parse(storedStudents));
+        }
+
+        const storedActualStudents = localStorage.getItem(
+          `gradezy_actual_students_${assessmentId}`,
+        );
+
+        if (storedActualStudents) {
+          const parsedActual = JSON.parse(
+            storedActualStudents,
+          );
+
+          setActualStudents(parsedActual);
+
+          if (storedStudents) {
+            const expected = JSON.parse(storedStudents);
+
+            const results = reconcileStudents(
+              expected as ExpectedStudent[],
+              parsedActual,
+            );
+
+            setReconciliationResults(results);
+          }
+        }
+      } catch {
+        setError("Could not load assessment data.");
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    void checkExtension();
+    loadAssessment();
+    checkExtension();
+  }, [assessmentId]);
 
+  useEffect(() => {
     const handleFocus = () => {
-      void checkExtension();
+      checkExtension();
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void checkExtension();
+        checkExtension();
       }
     };
 
-    window.addEventListener(
-      "focus",
-      handleFocus
-    );
-
+    window.addEventListener("focus", handleFocus);
     document.addEventListener(
       "visibilitychange",
-      handleVisibilityChange
+      handleVisibilityChange,
     );
 
     return () => {
-      active = false;
-
-      window.removeEventListener(
-        "focus",
-        handleFocus
-      );
-
+      window.removeEventListener("focus", handleFocus);
       document.removeEventListener(
         "visibilitychange",
-        handleVisibilityChange
+        handleVisibilityChange,
       );
     };
   }, []);
 
-  /*
-   * Run reconciliation and persist the imported data.
-   */
   const runReconciliation = (
-    students: ActualStudent[]
+    students: ActualStudent[],
   ) => {
+    if (!expectedStudents.length) {
+      setError(
+        "No expected student list was found for this assessment.",
+      );
+      return;
+    }
+
     const results = reconcileStudents(
       expectedStudents as ExpectedStudent[],
-      students
+      students,
     );
 
     setActualStudents(students);
@@ -403,142 +297,20 @@ export default function ReconciliationPage() {
 
     localStorage.setItem(
       `gradezy_actual_students_${assessmentId}`,
-      JSON.stringify(students)
+      JSON.stringify(students),
     );
   };
 
-  /*
-   * Upload expected/actual data.
-   */
-  const handleFileUpload = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    setIsProcessing(true);
-    setError("");
-
-    try {
-      const buffer = await file.arrayBuffer();
-
-      const workbook = XLSX.read(buffer, {
-        type: "array",
-      });
-
-      const firstSheetName =
-        workbook.SheetNames[0];
-
-      if (!firstSheetName) {
-        throw new Error(
-          "The uploaded file does not contain a worksheet."
-        );
-      }
-
-      const worksheet =
-        workbook.Sheets[firstSheetName];
-
-      const rows =
-        XLSX.utils.sheet_to_json<
-          Record<string, unknown>
-        >(worksheet, {
-          defval: "",
-        });
-
-      if (!rows.length) {
-        throw new Error(
-          "No student records were found in the uploaded file."
-        );
-      }
-
-      const students: Student[] = rows
-        .map((row) => ({
-          ncgId: getValue(row, [
-            "NCG ID",
-            "NCG_ID",
-            "NCGID",
-            "NCG-ID",
-          ]),
-
-          firstName: getValue(row, [
-            "First Name",
-            "FirstName",
-            "Forename",
-            "Given Name",
-            "GivenName",
-          ]),
-
-          lastName: getValue(row, [
-            "Last Name",
-            "LastName",
-            "Surname",
-            "Family Name",
-            "FamilyName",
-          ]),
-
-          grade: getValue(row, [
-            "Grade",
-            "Grades",
-            "Mark",
-            "Marks",
-            "Score",
-            "Percentage",
-            "Final Grade",
-            "FinalGrade",
-            "Final Mark",
-            "FinalMark",
-          ]),
-        }))
-        .filter(
-          (student) =>
-            student.ncgId ||
-            student.firstName ||
-            student.lastName
-        );
-
-      if (!students.length) {
-        throw new Error(
-          "The uploaded file does not contain recognisable student records."
-        );
-      }
-
-      runReconciliation(students);
-
-      setSelectedMethod("upload");
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Could not process the uploaded file."
-      );
-    } finally {
-      setIsProcessing(false);
-
-      event.target.value = "";
-    }
-  };
-
-  /*
-   * Import directly from StaffAdvantage through the extension.
-   */
   const handleExtensionImport = async () => {
-    if (extensionState !== "connected") {
-      return;
-    }
-
     setIsProcessing(true);
     setError("");
 
     try {
-      const students =
-        await requestStudentsFromExtension();
+      const students = await requestStudentsFromExtension();
 
       if (!students.length) {
         throw new Error(
-          "No student records were found. Open the StaffAdvantage assessment in another browser tab and try again."
+          "No student records were found. Open the StaffAdvantage assessment in another tab and try again.",
         );
       }
 
@@ -547,16 +319,135 @@ export default function ReconciliationPage() {
       setError(
         importError instanceof Error
           ? importError.message
-          : "Could not import records from StaffAdvantage."
+          : "Could not import records from StaffAdvantage.",
       );
     } finally {
       setIsProcessing(false);
     }
   };
 
-  /*
-   * Manually add a student row.
-   */
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    setIsProcessing(true);
+    setError("");
+    setSelectedMethod("upload");
+
+    try {
+      const buffer = await file.arrayBuffer();
+
+      const workbook = XLSX.read(buffer, {
+        type: "array",
+      });
+
+      const firstSheet = workbook.Sheets[
+        workbook.SheetNames[0]
+      ];
+
+      if (!firstSheet) {
+        throw new Error("The uploaded file does not contain any data.");
+      }
+
+      const rows = XLSX.utils.sheet_to_json<
+        Record<string, unknown>
+      >(firstSheet, {
+        defval: "",
+      });
+
+      if (!rows.length) {
+        throw new Error("The uploaded file contains no student records.");
+      }
+
+      const students: Student[] = rows
+        .map((row) => ({
+          ncgId: normalizeValue(
+            getValue(row, [
+              "ncg id",
+              "ncg_id",
+              "ncgid",
+              "ncg-id",
+            ]),
+          ),
+          firstName: normalizeValue(
+            getValue(row, [
+              "first name",
+              "firstname",
+              "forename",
+              "given name",
+              "givenname",
+            ]),
+          ),
+          lastName: normalizeValue(
+            getValue(row, [
+              "last name",
+              "lastname",
+              "surname",
+              "family name",
+              "familyname",
+            ]),
+          ),
+          grade: normalizeGrade(
+            getValue(row, [
+              "grade",
+              "grades",
+              "mark",
+              "marks",
+              "score",
+              "percentage",
+              "final grade",
+              "finalgrade",
+              "final mark",
+              "finalmark",
+            ]),
+          ),
+        }))
+        .filter(
+          (student) =>
+            student.ncgId ||
+            student.firstName ||
+            student.lastName,
+        );
+
+      if (!students.length) {
+        throw new Error(
+          "No valid student records could be found in the uploaded file.",
+        );
+      }
+
+      runReconciliation(students);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not process the uploaded file.",
+      );
+    } finally {
+      setIsProcessing(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleManualChange = (
+    index: number,
+    field: keyof Student,
+    value: string,
+  ) => {
+    setManualRows((rows) =>
+      rows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row,
+      ),
+    );
+  };
+
   const addManualRow = () => {
     setManualRows((rows) => [
       ...rows,
@@ -569,307 +460,209 @@ export default function ReconciliationPage() {
     ]);
   };
 
-  /*
-   * Update a manual student row.
-   */
-  const updateManualRow = (
-    index: number,
-    field: keyof Student,
-    value: string
-  ) => {
-    setManualRows((rows) =>
-      rows.map((row, rowIndex) =>
-        rowIndex === index
-          ? {
-              ...row,
-              [field]: value,
-            }
-          : row
-      )
-    );
-  };
-
-  /*
-   * Remove a manual row.
-   */
-  const removeManualRow = (index: number) => {
-    setManualRows((rows) => {
-      if (rows.length === 1) {
-        return [
-          {
-            ncgId: "",
-            firstName: "",
-            lastName: "",
-            grade: "",
-          },
-        ];
-      }
-
-      return rows.filter(
-        (_, rowIndex) => rowIndex !== index
-      );
-    });
-  };
-
-  /*
-   * Run manual reconciliation.
-   */
-  const handleManualReconciliation = () => {
+  const handleManualImport = () => {
     const validRows = manualRows.filter(
-      (student) =>
-        student.ncgId ||
-        student.firstName ||
-        student.lastName ||
-        student.grade
+      (row) =>
+        row.ncgId ||
+        row.firstName ||
+        row.lastName ||
+        row.grade,
     );
 
     if (!validRows.length) {
-      setError(
-        "Add at least one student before running reconciliation."
-      );
+      setError("Add at least one student before importing.");
       return;
     }
 
     setError("");
+    setSelectedMethod("manual");
     runReconciliation(validRows);
   };
 
-  /*
-   * Clear the current imported dataset.
-   */
-  const handleImportDifferentData = () => {
-    setActualStudents([]);
+  const clearResults = () => {
     setReconciliationResults([]);
-    setFilter("all");
+    setActualStudents([]);
     setSelectedMethod(null);
-    setError("");
+    setFilter("all");
 
     localStorage.removeItem(
-      `gradezy_actual_students_${assessmentId}`
+      `gradezy_actual_students_${assessmentId}`,
     );
   };
 
-  /*
-   * Summary metrics.
-   */
   const summary = useMemo(() => {
-    if (!reconciliationResults.length) {
-      return null;
-    }
+    if (!reconciliationResults.length) return null;
 
-    return calculateSummary(
-      reconciliationResults
-    );
+    return calculateSummary(reconciliationResults);
   }, [reconciliationResults]);
 
-  /*
-   * Generated issues.
-   */
   const issues = useMemo<Issue[]>(() => {
-    if (!reconciliationResults.length) {
-      return [];
-    }
+    if (!reconciliationResults.length) return [];
 
     return generateIssuesFromReconciliation(
-      reconciliationResults
+      reconciliationResults,
     );
   }, [reconciliationResults]);
 
-  /*
-   * Filter results.
-   */
   const filteredResults = useMemo(() => {
     if (filter === "all") {
       return reconciliationResults;
     }
 
     return reconciliationResults.filter(
-      (result) => result.status === filter
+      (result) => result.status === filter,
     );
   }, [filter, reconciliationResults]);
 
-  const issueCount = issues.length;
-
-  const hasResults =
-    reconciliationResults.length > 0;
+  const hasIssues = issues.length > 0;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white text-slate-950">
+      <>
         <AppSidebar />
 
-        <main className="lg:pl-64">
+        <main className="min-h-screen bg-white lg:pl-64">
           <div className="flex min-h-screen items-center justify-center">
             <div className="flex items-center gap-3 text-sm text-slate-500">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
-              Loading reconciliation...
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-slate-950" />
+              Loading assessment...
             </div>
           </div>
         </main>
-      </div>
+      </>
     );
   }
 
-  if (!assessment) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-white text-slate-950">
+    <>
       <AppSidebar
-        assessment={{
-          id: assessment.id,
-          name: assessment.name,
-          module: assessment.module,
-        }}
+        assessment={
+          assessment
+            ? {
+                id: assessment.id,
+                name: assessment.name,
+                module: assessment.module,
+              }
+            : undefined
+        }
       />
 
-      <main className="lg:pl-64">
-        {/* Header */}
+      <main className="min-h-screen bg-white lg:pl-64">
         <header className="min-h-20 border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-2 text-xs text-slate-400">
-                <button
-                  type="button"
-                  onClick={() =>
-                    router.push(
-                      `/assessments/${assessment.id}`
-                    )
-                  }
-                  className="transition hover:text-slate-950"
-                >
-                  {assessment.name}
-                </button>
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(`/assessments/${assessmentId}`)
+                }
+                className="w-fit text-sm text-slate-400 transition hover:text-slate-700"
+              >
+                ← {assessment?.name ?? "Assessment"}
+              </button>
 
-                <span>/</span>
-
-                <span className="text-slate-500">
-                  Reconciliation
-                </span>
-              </div>
-
-              <h1 className="truncate text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-3xl">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-4xl">
                 Reconciliation
               </h1>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Compare expected students with submitted
-                assessment records.
+              <p className="text-sm text-slate-500">
+                Compare expected students against submitted
+                assessment data.
               </p>
             </div>
-
-            {hasResults && (
-              <button
-                type="button"
-                onClick={handleImportDifferentData}
-                className="hidden shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:block"
-              >
-                Import different data
-              </button>
-            )}
           </div>
         </header>
 
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-          {/* Assessment context */}
-          <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Assessment
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-950">
-                  {assessment.name}
-                </p>
-              </div>
+          {assessment && (
+            <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Assessment
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-950">
+                    {assessment.name}
+                  </p>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Module
-                </p>
-                <p className="mt-1 text-sm text-slate-700">
-                  {assessment.module}
-                </p>
-              </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Module
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {assessment.module}
+                  </p>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Level
-                </p>
-                <p className="mt-1 text-sm text-slate-700">
-                  {assessment.level}
-                </p>
-              </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Level
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {assessment.level}
+                  </p>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Cohort
-                </p>
-                <p className="mt-1 text-sm text-slate-700">
-                  {assessment.cohort}
-                </p>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Cohort
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {assessment.cohort}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Expected students
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {expectedStudents.length}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Error */}
           {error && (
             <div className="mb-8 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
+              <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
                 !
               </div>
 
               <div>
-                <p className="text-sm font-semibold text-red-900">
-                  Something went wrong
+                <p className="text-sm font-semibold text-red-800">
+                  Something needs your attention
                 </p>
 
-                <p className="mt-1 text-sm text-red-700">
+                <p className="mt-1 text-sm leading-6 text-red-700">
                   {error}
                 </p>
               </div>
             </div>
           )}
 
-          {!hasResults ? (
-            <>
-              {/* Intro */}
-              <div className="mb-8 max-w-2xl">
-                <p className="text-sm font-semibold text-indigo-600">
-                  Step 1
-                </p>
-
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
-                  Bring in the assessment records
+          {!reconciliationResults.length ? (
+            <div className="space-y-8">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+                  Bring in assessment data
                 </h2>
 
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Choose how you want Gradezy to receive the
-                  student records. Once imported, Gradezy will
-                  automatically compare them with the expected
-                  student list.
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                  Choose how you want to bring student results
+                  into Gradezy. Once imported, Gradezy will
+                  automatically identify mismatches and missing
+                  records.
                 </p>
               </div>
 
-              {/* Data source cards */}
-              <div className="grid gap-5 md:grid-cols-2">
+              <div className="grid gap-5 lg:grid-cols-2">
                 {/* Upload */}
-                <div
-                  className={`rounded-3xl border p-6 shadow-sm transition ${
-                    selectedMethod === "upload"
-                      ? "border-indigo-200 bg-indigo-50/40"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-lg">
-                      ↑
-                    </div>
-
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      File
-                    </span>
+                <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <UploadIcon />
                   </div>
 
                   <h3 className="mt-5 text-lg font-semibold text-slate-950">
@@ -877,485 +670,353 @@ export default function ReconciliationPage() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Upload an Excel or CSV file containing
-                    student IDs, names and grades.
+                    Upload an Excel or CSV file containing the
+                    student results.
                   </p>
 
-                  <label className="mt-6 flex cursor-pointer items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    {isProcessing
+                  <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    {isProcessing &&
+                    selectedMethod === "upload"
                       ? "Processing..."
                       : "Choose file"}
 
                     <input
                       type="file"
                       accept=".xlsx,.xls,.csv"
+                      className="hidden"
                       onChange={handleFileUpload}
                       disabled={isProcessing}
-                      className="hidden"
                     />
                   </label>
                 </div>
 
                 {/* Extension */}
                 <div
-                  onClick={() =>
-                    setSelectedMethod("extension")
-                  }
-                  className={`cursor-pointer rounded-3xl border p-6 shadow-sm transition ${
-                    selectedMethod === "extension"
-                      ? "border-indigo-200 bg-indigo-50/40"
-                      : "border-slate-200 bg-white hover:border-slate-300"
+                  className={`rounded-3xl border p-7 shadow-sm transition-all duration-500 ${
+                    extensionState === "connected"
+                      ? "border-emerald-200 bg-emerald-50/60 shadow-emerald-100"
+                      : extensionState === "checking"
+                        ? "border-indigo-200 bg-indigo-50/30"
+                        : "border-slate-200 bg-white"
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-lg">
-                      ◉
+                  <div className="flex items-start justify-between gap-4">
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all duration-500 ${
+                        extensionState === "connected"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : extensionState === "checking"
+                            ? "bg-indigo-100 text-indigo-700"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {extensionState === "connected" ? (
+                        <CheckIcon />
+                      ) : extensionState === "checking" ? (
+                        <SpinnerIcon />
+                      ) : (
+                        <ExtensionIcon />
+                      )}
                     </div>
 
-                    {extensionState ===
-                    "connected" ? (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                        Connected
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                        Extension
-                      </span>
-                    )}
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold text-slate-950">
+                          Gradezy Extension
+                        </h3>
+
+                        {extensionState === "connected" && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                            Connected
+                          </span>
+                        )}
+
+                        {extensionState === "checking" && (
+                          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700">
+                            Checking...
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        Import student results directly from
+                        StaffAdvantage.
+                      </p>
+                    </div>
                   </div>
 
-                  <h3 className="mt-5 text-lg font-semibold text-slate-950">
-                    Connect with Gradezy Extension
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Read student records directly from the
-                    assessment system currently open in your
-                    browser.
-                  </p>
-
-                  {selectedMethod === "extension" && (
-                    <div
-                      className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5"
-                      onClick={(event) =>
-                        event.stopPropagation()
-                      }
-                    >
-                      {/* Checking */}
-                      {extensionState ===
-                        "checking" && (
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
-                          </div>
+                  <div className="mt-6">
+                    {extensionState === "checking" && (
+                      <div className="rounded-xl border border-indigo-100 bg-white px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-indigo-500" />
 
                           <div>
-                            <p className="text-sm font-semibold text-slate-950">
-                              Checking for Gradezy
-                              Extension
+                            <p className="text-sm font-semibold text-slate-900">
+                              Checking your browser
                             </p>
 
-                            <p className="mt-1 text-xs leading-5 text-slate-500">
-                              Gradezy is checking whether
-                              the browser extension is
-                              installed and connected.
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Looking for the Gradezy Extension...
                             </p>
                           </div>
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Connected */}
-                      {extensionState ===
-                        "connected" && (
-                        <div>
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
-                                ✓
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-semibold text-slate-950">
-                                  Gradezy Extension
-                                  connected
-                                </p>
-
-                                <p className="mt-1 text-xs leading-5 text-slate-500">
-                                  Your browser extension
-                                  is ready to import
-                                  assessment records.
-                                </p>
-
-                                {extensionVersion && (
-                                  <p className="mt-1 text-[11px] text-slate-400">
-                                    Version{" "}
-                                    {
-                                      extensionVersion
-                                    }
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                              Ready
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={
-                              handleExtensionImport
-                            }
-                            disabled={isProcessing}
-                            className="mt-5 flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isProcessing
-                              ? "Importing from StaffAdvantage..."
-                              : "Import from StaffAdvantage"}
-                          </button>
-
-                          <p className="mt-3 text-center text-[11px] leading-5 text-slate-400">
-                            Keep the StaffAdvantage
-                            assessment open in another
-                            browser tab.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Not installed */}
-                      {extensionState ===
-                        "not-installed" && (
-                        <div>
+                    {extensionState === "connected" && (
+                      <div className="space-y-4">
+                        <div className="rounded-xl border border-emerald-200 bg-white px-4 py-4">
                           <div className="flex items-start gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-sm text-slate-500">
-                              ↓
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                              <CheckIcon small />
                             </div>
 
                             <div>
                               <p className="text-sm font-semibold text-slate-950">
-                                Get the Gradezy Extension
+                                Connected and ready
                               </p>
 
                               <p className="mt-1 text-xs leading-5 text-slate-500">
-                                Install the Gradezy browser
-                                extension to import
-                                assessment records directly
-                                from StaffAdvantage.
+                                Gradezy can now communicate with
+                                StaffAdvantage.
                               </p>
                             </div>
                           </div>
+                        </div>
 
-                          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                            <a
-                              href="https://microsoftedge.microsoft.com/addons/detail/staffadvantage-grade-fill/iocfhndobdbbiemehcnpfnippohngocn"
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex flex-1 items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                            >
-                              Get Gradezy Extension
-                            </a>
-
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                setExtensionState(
-                                  "checking"
-                                );
-
-                                const result =
-                                  await pingExtension();
-
-                                if (
-                                  result.available
-                                ) {
-                                  setExtensionState(
-                                    "connected"
-                                  );
-
-                                  setExtensionVersion(
-                                    result.version ??
-                                      null
-                                  );
-                                } else {
-                                  setExtensionState(
-                                    "not-installed"
-                                  );
-                                }
-                              }}
-                              className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                            >
-                              Check again
-                            </button>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="flex items-center gap-2 text-xs text-slate-600">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                              ✓
+                            </span>
+                            Extension detected
                           </div>
 
-                          <p className="mt-3 text-[11px] leading-5 text-slate-400">
-                            Already installed? Click
-                            “Check again” and Gradezy will
-                            reconnect automatically.
+                          <div className="flex items-center gap-2 text-xs text-slate-600">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                              ✓
+                            </span>
+                            Connection verified
+                          </div>
+                        </div>
+
+                        {extensionVersion && (
+                          <p className="text-[11px] text-slate-400">
+                            Extension version {extensionVersion}
+                          </p>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={handleExtensionImport}
+                          disabled={isProcessing}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isProcessing ? (
+                            <>
+                              <SpinnerIcon />
+                              Importing...
+                            </>
+                          ) : (
+                            <>
+                              Import from StaffAdvantage
+                              <span aria-hidden="true">→</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {extensionState === "not-installed" && (
+                      <div className="space-y-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                          <p className="text-sm font-semibold text-slate-900">
+                            Extension not connected yet
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            Install the Gradezy Extension, then
+                            return to this page. Gradezy will
+                            automatically detect it.
                           </p>
                         </div>
-                      )}
-                    </div>
-                  )}
+
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <a
+                            href="https://microsoftedge.microsoft.com/addons/detail/staffadvantage-grade-fill/iocfhndobdbbiemehcnpfnippohngocn"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                          >
+                            Get Gradezy Extension
+                            <span aria-hidden="true">↗</span>
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={checkExtension}
+                            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Check again
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* API */}
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 opacity-80 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-lg">
-                      ↔
-                    </div>
+                <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <ApiIcon />
+                  </div>
 
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500">
+                  <div className="mt-5 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-slate-950">
+                      API connection
+                    </h3>
+
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Coming soon
                     </span>
                   </div>
 
-                  <h3 className="mt-5 text-lg font-semibold text-slate-950">
-                    Connect via API
-                  </h3>
-
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Connect Gradezy directly to supported
-                    assessment systems using an API.
+                    Connect Gradezy directly to your assessment
+                    system through an API.
                   </p>
 
                   <button
                     type="button"
                     disabled
-                    className="mt-6 flex w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-400"
+                    className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-400"
                   >
-                    Coming soon
+                    API connection
                   </button>
                 </div>
 
                 {/* Manual */}
-                <div
-                  onClick={() =>
-                    setSelectedMethod("manual")
-                  }
-                  className={`cursor-pointer rounded-3xl border p-6 shadow-sm transition ${
-                    selectedMethod === "manual"
-                      ? "border-indigo-200 bg-indigo-50/40"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-lg">
-                      +
-                    </div>
-
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      Manual
-                    </span>
+                <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <EditIcon />
                   </div>
 
                   <h3 className="mt-5 text-lg font-semibold text-slate-950">
-                    Enter records manually
+                    Enter manually
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Add student records directly when you only
-                    have a small number of records to reconcile.
+                    Add student records manually when you only
+                    have a small number of results.
                   </p>
 
-                  {selectedMethod === "manual" && (
-                    <div
-                      className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5"
-                      onClick={(event) =>
-                        event.stopPropagation()
-                      }
-                    >
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[700px] text-left">
-                          <thead>
-                            <tr className="border-b border-slate-200">
-                              <th className="pb-3 pr-3 text-xs font-semibold text-slate-500">
-                                NCG ID
-                              </th>
-
-                              <th className="pb-3 pr-3 text-xs font-semibold text-slate-500">
-                                First name
-                              </th>
-
-                              <th className="pb-3 pr-3 text-xs font-semibold text-slate-500">
-                                Last name
-                              </th>
-
-                              <th className="pb-3 pr-3 text-xs font-semibold text-slate-500">
-                                Grade
-                              </th>
-
-                              <th className="pb-3 text-xs font-semibold text-slate-500">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
-
-                          <tbody>
-                            {manualRows.map(
-                              (row, index) => (
-                                <tr
-                                  key={index}
-                                  className="border-b border-slate-200 last:border-0"
-                                >
-                                  <td className="py-3 pr-3">
-                                    <input
-                                      value={row.ncgId}
-                                      onChange={(event) =>
-                                        updateManualRow(
-                                          index,
-                                          "ncgId",
-                                          event.target
-                                            .value
-                                        )
-                                      }
-                                      placeholder="NCG12345"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-                                    />
-                                  </td>
-
-                                  <td className="py-3 pr-3">
-                                    <input
-                                      value={
-                                        row.firstName
-                                      }
-                                      onChange={(event) =>
-                                        updateManualRow(
-                                          index,
-                                          "firstName",
-                                          event.target
-                                            .value
-                                        )
-                                      }
-                                      placeholder="First name"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-                                    />
-                                  </td>
-
-                                  <td className="py-3 pr-3">
-                                    <input
-                                      value={
-                                        row.lastName
-                                      }
-                                      onChange={(event) =>
-                                        updateManualRow(
-                                          index,
-                                          "lastName",
-                                          event.target
-                                            .value
-                                        )
-                                      }
-                                      placeholder="Last name"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-                                    />
-                                  </td>
-
-                                  <td className="py-3 pr-3">
-                                    <input
-                                      value={row.grade}
-                                      onChange={(event) =>
-                                        updateManualRow(
-                                          index,
-                                          "grade",
-                                          event.target
-                                            .value
-                                        )
-                                      }
-                                      placeholder="Grade"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-                                    />
-                                  </td>
-
-                                  <td className="py-3">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        removeManualRow(
-                                          index
-                                        )
-                                      }
-                                      className="text-xs font-medium text-slate-500 transition hover:text-red-600"
-                                    >
-                                      Remove
-                                    </button>
-                                  </td>
-                                </tr>
-                              )
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <button
-                          type="button"
-                          onClick={addManualRow}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          + Add student
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={
-                            handleManualReconciliation
+                  <div className="mt-6 space-y-3">
+                    {manualRows.map((row, index) => (
+                      <div
+                        key={index}
+                        className="grid gap-2 sm:grid-cols-4"
+                      >
+                        <input
+                          value={row.ncgId}
+                          onChange={(event) =>
+                            handleManualChange(
+                              index,
+                              "ncgId",
+                              event.target.value,
+                            )
                           }
-                          className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                        >
-                          Run reconciliation
-                        </button>
+                          placeholder="NCG ID"
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                        />
+
+                        <input
+                          value={row.firstName}
+                          onChange={(event) =>
+                            handleManualChange(
+                              index,
+                              "firstName",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="First name"
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                        />
+
+                        <input
+                          value={row.lastName}
+                          onChange={(event) =>
+                            handleManualChange(
+                              index,
+                              "lastName",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Last name"
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                        />
+
+                        <input
+                          value={row.grade}
+                          onChange={(event) =>
+                            handleManualChange(
+                              index,
+                              "grade",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Grade"
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                        />
                       </div>
+                    ))}
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={addManualRow}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        + Add student
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleManualImport}
+                        className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        Reconcile data
+                      </button>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Expected student count */}
-              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">
-                      Expected students
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Students currently loaded for this
-                      assessment.
-                    </p>
                   </div>
-
-                  <span className="text-2xl font-semibold tracking-tight text-slate-950">
-                    {expectedStudents.length}
-                  </span>
                 </div>
               </div>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="space-y-8">
               {/* Results header */}
-              <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
                 <div>
-                  <p className="text-sm font-semibold text-indigo-600">
-                    Step 2
+                  <p className="text-sm font-medium text-slate-500">
+                    Reconciliation complete
                   </p>
 
-                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
-                    Reconciliation results
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+                    Assessment data overview
                   </h2>
 
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Gradezy compared {expectedStudents.length}{" "}
-                    expected students with{" "}
-                    {actualStudents.length} imported records.
+                  <p className="mt-1 text-sm text-slate-500">
+                    Gradezy compared {expectedStudents.length} expected
+                    students against {actualStudents.length} imported
+                    records.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={handleImportDifferentData}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:hidden"
+                  onClick={clearResults}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   Import different data
                 </button>
@@ -1363,385 +1024,611 @@ export default function ReconciliationPage() {
 
               {/* Summary */}
               {summary && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <SummaryCard
-                    label="Total expected"
-                    value={summary.totalExpected}
+                    label="Expected"
+                    value={summary.expected}
+                    description="Students expected"
                   />
 
                   <SummaryCard
                     label="Matched"
                     value={summary.matched}
+                    description="Records aligned"
                     tone="success"
                   />
 
                   <SummaryCard
-                    label="Missing"
-                    value={summary.missing}
-                    tone="danger"
-                  />
-
-                  <SummaryCard
-                    label="Name mismatches"
-                    value={summary.nameMismatches}
+                    label="Needs review"
+                    value={
+                      summary.missing +
+                      summary.nameMismatches +
+                      summary.gradeMismatches
+                    }
+                    description="Potential issues"
                     tone="warning"
                   />
 
                   <SummaryCard
-                    label="Grade mismatches"
-                    value={summary.gradeMismatches}
-                    tone="warning"
+                    label="Unexpected"
+                    value={summary.unexpected}
+                    description="Not on expected list"
+                    tone="neutral"
                   />
                 </div>
               )}
 
-              {/* Issues banner */}
-              {issueCount > 0 && (
-                <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-700">
-                      !
+              {/* Issue banner */}
+              {hasIssues ? (
+                <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                      <AlertIcon />
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-950">
+                        {issues.length} issue
+                        {issues.length === 1 ? "" : "s"} need
+                        review
+                      </h3>
+
+                      <p className="mt-1 text-sm leading-6 text-amber-800/80">
+                        Gradezy found records that may need to be
+                        corrected before the assessment is ready.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          `/assessments/${assessmentId}/issues`,
+                        )
+                      }
+                      className="hidden rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 sm:block"
+                    >
+                      Review issues
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-emerald-200 bg-emerald-50/70 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                      <CheckIcon />
                     </div>
 
                     <div>
-                      <p className="text-sm font-semibold text-amber-900">
-                        {issueCount} issue
-                        {issueCount === 1
-                          ? ""
-                          : "s"} need review
-                      </p>
+                      <h3 className="font-semibold text-emerald-950">
+                        Everything reconciled
+                      </h3>
 
-                      <p className="mt-1 text-xs leading-5 text-amber-700">
-                        Review the reconciliation issues before
-                        marking this assessment ready.
+                      <p className="mt-1 text-sm leading-6 text-emerald-800/80">
+                        All imported records align with the
+                        expected student list.
                       </p>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(
-                        `/assessments/${assessment.id}/issues`
-                      )
-                    }
-                    className="shrink-0 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Review issues
-                  </button>
                 </div>
               )}
 
               {/* Filters */}
-              <div className="mt-8 rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-white p-2">
+                <div className="flex gap-1 overflow-x-auto">
+                  <FilterButton
+                    active={filter === "all"}
+                    onClick={() => setFilter("all")}
+                    label="All"
+                    count={reconciliationResults.length}
+                  />
+
+                  <FilterButton
+                    active={filter === "matched"}
+                    onClick={() => setFilter("matched")}
+                    label="Matched"
+                    count={summary?.matched ?? 0}
+                  />
+
+                  <FilterButton
+                    active={filter === "missing"}
+                    onClick={() => setFilter("missing")}
+                    label="Missing"
+                    count={summary?.missing ?? 0}
+                  />
+
+                  <FilterButton
+                    active={filter === "name_mismatch"}
+                    onClick={() => setFilter("name_mismatch")}
+                    label="Name mismatch"
+                    count={summary?.nameMismatches ?? 0}
+                  />
+
+                  <FilterButton
+                    active={filter === "grade_mismatch"}
+                    onClick={() => setFilter("grade_mismatch")}
+                    label="Grade mismatch"
+                    count={summary?.gradeMismatches ?? 0}
+                  />
+
+                  <FilterButton
+                    active={filter === "unexpected"}
+                    onClick={() => setFilter("unexpected")}
+                    label="Unexpected"
+                    count={summary?.unexpected ?? 0}
+                  />
+                </div>
+              </div>
+
+              {/* Student table */}
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-6 py-5">
-                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">
+                      <h3 className="font-semibold text-slate-950">
                         Student reconciliation
                       </h3>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        Review how each imported record compares
-                        with the expected list.
+                      <p className="mt-1 text-xs text-slate-500">
+                        {filteredResults.length} record
+                        {filteredResults.length === 1 ? "" : "s"}
+                        shown
                       </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {(
-                        [
-                          ["all", "All"],
-                          ["matched", "Matched"],
-                          ["missing", "Missing"],
-                          [
-                            "name_mismatch",
-                            "Name mismatch",
-                          ],
-                          [
-                            "grade_mismatch",
-                            "Grade mismatch",
-                          ],
-                          [
-                            "unexpected",
-                            "Unexpected",
-                          ],
-                        ] as [FilterType, string][]
-                      ).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() =>
-                            setFilter(value)
-                          }
-                          className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                            filter === value
-                              ? "bg-slate-950 text-white"
-                              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left">
+                  <table className="w-full min-w-[760px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                        <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                           Student
                         </th>
 
-                        <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                        <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                           NCG ID
                         </th>
 
-                        <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                          Expected
+                        <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Expected grade
                         </th>
 
-                        <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                          Actual
+                        <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                          Imported grade
                         </th>
 
-                        <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                        <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                           Status
                         </th>
                       </tr>
                     </thead>
 
-                    <tbody>
-                      {filteredResults.map(
-                        (result, index) => {
-                          const studentName =
-                            result.expected
-                              ? `${result.expected.firstName} ${result.expected.lastName}`.trim()
-                              : result.actual
-                                ? `${result.actual.firstName} ${result.actual.lastName}`.trim()
-                                : "Unknown student";
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredResults.map((result, index) => {
+                        const expected = result.expected;
+                        const actual = result.actual;
 
-                          return (
-                            <tr
-                              key={`${result.expected?.ncgId ?? result.actual?.ncgId ?? "row"}-${index}`}
-                              className="border-b border-slate-100 last:border-0"
-                            >
-                              <td className="px-6 py-4">
-                                <p className="text-sm font-medium text-slate-950">
-                                  {studentName ||
-                                    "Unnamed student"}
-                                </p>
+                        const firstName =
+                          expected?.firstName ??
+                          actual?.firstName ??
+                          "";
 
-                                {result.status ===
-                                  "name_mismatch" &&
-                                  result.expected &&
-                                  result.actual && (
-                                    <p className="mt-1 text-xs text-slate-400">
-                                      Imported as{" "}
-                                      {result.actual.firstName}{" "}
-                                      {
-                                        result.actual
-                                          .lastName
-                                      }
-                                    </p>
-                                  )}
-                              </td>
+                        const lastName =
+                          expected?.lastName ??
+                          actual?.lastName ??
+                          "";
 
-                              <td className="px-6 py-4">
-                                <span className="font-mono text-xs text-slate-600">
-                                  {result.expected
-                                    ?.ncgId ??
-                                    result.actual
-                                      ?.ncgId ??
-                                    "—"}
-                                </span>
-                              </td>
+                        const ncgId =
+                          expected?.ncgId ??
+                          actual?.ncgId ??
+                          "";
 
-                              <td className="px-6 py-4">
-                                <span className="text-sm text-slate-700">
-                                  {result.expected
-                                    ?.grade || "—"}
-                                </span>
-                              </td>
+                        const expectedGrade =
+                          expected?.grade ?? "";
 
-                              <td className="px-6 py-4">
-                                <span className="text-sm text-slate-700">
-                                  {result.actual?.grade ||
-                                    "—"}
-                                </span>
-                              </td>
+                        const actualGrade =
+                          actual?.grade ?? "";
 
-                              <td className="px-6 py-4">
-                                <span
-                                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(
-                                    result.status
-                                  )}`}
-                                >
-                                  {getStatusLabel(
-                                    result.status
-                                  )}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
-
-                      {!filteredResults.length && (
-                        <tr>
-                          <td
-                            colSpan={5}
-                            className="px-6 py-12 text-center"
+                        return (
+                          <tr
+                            key={`${ncgId}-${index}`}
+                            className="transition hover:bg-slate-50/70"
                           >
-                            <p className="text-sm font-medium text-slate-700">
-                              No students match this filter.
-                            </p>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                                  {(
+                                    firstName?.[0] ?? "?"
+                                  ).toUpperCase()}
+                                  {(
+                                    lastName?.[0] ?? ""
+                                  ).toUpperCase()}
+                                </div>
 
-                            <p className="mt-1 text-xs text-slate-400">
-                              Try another reconciliation filter.
-                            </p>
-                          </td>
-                        </tr>
-                      )}
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {firstName} {lastName}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-6 py-4 text-sm text-slate-600">
+                              {ncgId || "—"}
+                            </td>
+
+                            <td className="px-6 py-4 text-sm font-medium text-slate-700">
+                              {expectedGrade || "—"}
+                            </td>
+
+                            <td className="px-6 py-4 text-sm font-medium text-slate-700">
+                              {actualGrade || "—"}
+                            </td>
+
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                  result,
+                                )}`}
+                              >
+                                {getStatusLabel(result)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Table footer */}
-                <div className="border-t border-slate-200 px-6 py-4">
-                  <p className="text-xs text-slate-400">
-                    Showing {filteredResults.length} of{" "}
-                    {reconciliationResults.length}{" "}
-                    reconciliation records
-                  </p>
-                </div>
-              </div>
+                {!filteredResults.length && (
+                  <div className="px-6 py-12 text-center">
+                    <p className="text-sm font-medium text-slate-900">
+                      No records match this filter.
+                    </p>
 
-              {/* Missing data alert */}
-              {summary &&
-                summary.missing > 0 && (
-                  <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">
-                        !
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-semibold text-red-900">
-                          {summary.missing} student
-                          {summary.missing === 1
-                            ? ""
-                            : "s"} missing from the
-                          imported records
-                        </p>
-
-                        <p className="mt-1 text-sm leading-6 text-red-700">
-                          These students appear on the expected
-                          list but were not found in the imported
-                          assessment data.
-                        </p>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFilter("all")}
+                      className="mt-2 text-sm font-semibold text-slate-600 underline underline-offset-4"
+                    >
+                      Show all records
+                    </button>
                   </div>
                 )}
+              </div>
+
+              {/* Missing students */}
+              {summary && summary.missing > 0 && (
+                <div className="rounded-3xl border border-red-200 bg-red-50/60 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
+                      <AlertIcon />
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold text-red-950">
+                        {summary.missing} student
+                        {summary.missing === 1 ? "" : "s"} missing
+                        from imported data
+                      </h3>
+
+                      <p className="mt-1 text-sm leading-6 text-red-800/80">
+                        These students appear on the expected list
+                        but were not found in the imported results.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Next steps */}
-              <div className="mt-8 grid gap-4 md:grid-cols-2">
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-sm">
-                    ✓
-                  </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">
+                  Continue with this assessment
+                </h3>
 
-                  <h3 className="mt-5 text-lg font-semibold text-slate-950">
-                    Review issues
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Investigate missing students, mismatched
-                    names, grades and unexpected records.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(
-                        `/assessments/${assessment.id}/issues`
-                      )
-                    }
-                    className="mt-5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Open issues
-                  </button>
-                </div>
-
-                <div className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-6 shadow-sm">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-sm shadow-sm">
-                    →
-                  </div>
-
-                  <h3 className="mt-5 text-lg font-semibold text-slate-950">
-                    Check assessment readiness
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Once reconciliation is complete, review the
-                    remaining checks before publishing.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(
-                        `/assessments/${assessment.id}/readiness`
-                      )
-                    }
-                    className="mt-5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Review readiness
-                  </button>
-                </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  Use the reconciliation results to move through
+                  the remaining assessment checks.
+                </p>
               </div>
-            </>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      `/assessments/${assessmentId}/issues`,
+                    )
+                  }
+                  className="group rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                      <AlertIcon />
+                    </div>
+
+                    <span className="text-slate-400 transition group-hover:translate-x-1">
+                      →
+                    </span>
+                  </div>
+
+                  <h4 className="mt-5 font-semibold text-slate-950">
+                    Review issues
+                  </h4>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Review mismatches, missing students and other
+                    reconciliation findings.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      `/assessments/${assessmentId}/readiness`,
+                    )
+                  }
+                  className="group rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                      <CheckIcon />
+                    </div>
+
+                    <span className="text-slate-400 transition group-hover:translate-x-1">
+                      →
+                    </span>
+                  </div>
+
+                  <h4 className="mt-5 font-semibold text-slate-950">
+                    Check readiness
+                  </h4>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Run the final checks before publishing the
+                    assessment.
+                  </p>
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </main>
-    </div>
+    </>
   );
 }
 
 function SummaryCard({
   label,
   value,
+  description,
   tone = "default",
 }: {
   label: string;
   value: number;
-  tone?: "default" | "success" | "warning" | "danger";
+  description: string;
+  tone?: "default" | "success" | "warning" | "neutral";
 }) {
-  const toneClasses = {
-    default:
-      "border-slate-200 bg-white text-slate-950",
-    success:
-      "border-emerald-200 bg-emerald-50/60 text-emerald-800",
-    warning:
-      "border-amber-200 bg-amber-50/60 text-amber-800",
-    danger:
-      "border-red-200 bg-red-50/60 text-red-800",
-  };
+  const valueClass =
+    tone === "success"
+      ? "text-emerald-700"
+      : tone === "warning"
+        ? "text-amber-700"
+        : tone === "neutral"
+          ? "text-slate-700"
+          : "text-slate-950";
 
   return (
-    <div
-      className={`rounded-2xl border p-5 shadow-sm ${toneClasses[tone]}`}
-    >
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-medium text-slate-500">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-semibold tracking-tight">
+      <p
+        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
+      >
         {value}
       </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {description}
+      </p>
     </div>
+  );
+}
+
+function FilterButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
+        active
+          ? "bg-slate-950 text-white"
+          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+      }`}
+    >
+      {label}
+
+      <span
+        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+          active
+            ? "bg-white/15 text-white"
+            : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M12 16V4m0 0 4 4m-4-4L8 8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ExtensionIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M9 3v3a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h3a2 2 0 0 1 2 2v3h6v-3a2 2 0 0 1 2-2h3a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-3a2 2 0 0 1-2-2V3H9Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ApiIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="6" r="2.5" />
+      <circle cx="18" cy="18" r="2.5" />
+      <path
+        d="m8.2 10.8 7.5-3.6M8.2 13.2l7.5 3.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M12 20h9"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({
+  small = false,
+}: {
+  small?: boolean;
+}) {
+  return (
+    <svg
+      className={small ? "h-3.5 w-3.5" : "h-5 w-5"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+    >
+      <path
+        d="m5 12 4 4L19 6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg
+      className="h-5 w-5 animate-spin"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        className="opacity-25"
+      />
+
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M10.3 3.8 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M12 9v4"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M12 17h.01"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
