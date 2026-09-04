@@ -48,39 +48,61 @@ export default function NewAssessmentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#070b12] text-white lg:pl-64">
+    <main className="min-h-screen bg-white text-slate-950 lg:pl-64">
       <AppSidebar />
+
+      <header className="flex min-h-20 items-center justify-between border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
+        <div>
+          <p className="text-sm text-slate-500">
+            Workspace
+          </p>
+
+          <h1 className="mt-1 text-xl font-semibold text-slate-950">
+            New assessment
+          </h1>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/assessments")}
+          className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+      </header>
+
       <div className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
-        {/* HEADER */}
         <div className="mb-10">
           <button
             onClick={() => router.push("/dashboard")}
-            className="mb-6 text-sm text-slate-500 transition hover:text-white"
+            className="mb-6 text-sm text-slate-500 transition hover:text-slate-950"
           >
             ← Back to dashboard
           </button>
 
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-300">
-            New assessment
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600">
+            Assessment setup
           </p>
 
-          <h1 className="mt-3 text-4xl font-semibold tracking-[-0.03em]">
+          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.03em] text-slate-950">
             Create an assessment
-          </h1>
+          </h2>
 
-          <p className="mt-3 max-w-xl leading-7 text-slate-400">
-            Set up your assessment before bringing in your student and
-            assessment data.
+          <p className="mt-3 max-w-xl leading-7 text-slate-500">
+            Set up your assessment before bringing in your student
+            and assessment data.
           </p>
         </div>
 
-        {/* FORM */}
-        <div className="rounded-3xl border border-white/10 bg-[#0d131d] p-6 sm:p-8">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="space-y-7">
+
             <FormField label="Assessment name" required>
               <input
                 value={assessmentName}
-                onChange={(e) => setAssessmentName(e.target.value)}
+                onChange={(e) =>
+                  setAssessmentName(e.target.value)
+                }
                 placeholder="e.g. Final Assessment"
                 className="input"
               />
@@ -127,14 +149,20 @@ export default function NewAssessmentPage() {
               <FormField label="Assessment type" required>
                 <select
                   value={assessmentType}
-                  onChange={(e) => setAssessmentType(e.target.value)}
+                  onChange={(e) =>
+                    setAssessmentType(e.target.value)
+                  }
                   className="input"
                 >
                   <option value="">Select type</option>
                   <option value="Coursework">Coursework</option>
-                  <option value="Final Assessment">Final Assessment</option>
+                  <option value="Final Assessment">
+                    Final Assessment
+                  </option>
                   <option value="Exam">Exam</option>
-                  <option value="Presentation">Presentation</option>
+                  <option value="Presentation">
+                    Presentation
+                  </option>
                   <option value="Project">Project</option>
                 </select>
               </FormField>
@@ -143,45 +171,54 @@ export default function NewAssessmentPage() {
                 <input
                   type="date"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+                  onChange={(e) =>
+                    setDueDate(e.target.value)
+                  }
                   className="input"
                 />
               </FormField>
             </div>
           </div>
 
-          <div className="my-8 border-t border-white/10" />
+          <div className="my-8 border-t border-slate-200" />
 
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div>
-              <p className="text-sm font-medium">Next: bring in your data</p>
+              <p className="text-sm font-medium text-slate-950">
+                Next: bring in your data
+              </p>
 
               <p className="mt-1 text-sm text-slate-500">
-                Upload your Progress Tracker after creating the assessment.
+                Upload your Progress Tracker after creating the
+                assessment.
               </p>
             </div>
 
             <button
               onClick={handleCreate}
               disabled={!isComplete || creating}
-              className={`rounded-full px-6 py-3 text-sm font-semibold transition ${
+              className={`rounded-xl px-6 py-3 text-sm font-semibold transition ${
                 isComplete && !creating
-                  ? "bg-white text-[#070b12] hover:bg-slate-200"
-                  : "cursor-not-allowed bg-white/10 text-slate-600"
+                  ? "bg-slate-950 text-white hover:bg-slate-800"
+                  : "cursor-not-allowed bg-slate-100 text-slate-400"
               }`}
             >
-              {creating ? "Creating..." : "Create assessment →"}
+              {creating
+                ? "Creating..."
+                : "Create assessment →"}
             </button>
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-          <p className="text-sm font-medium">Why does Gradezy need this?</p>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <p className="text-sm font-medium text-slate-950">
+            Why does Gradezy need this?
+          </p>
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            These details give Gradezy the context it needs to understand the
-            data you upload and determine what should be present in the
-            assessment.
+            These details give Gradezy the context it needs to
+            understand the data you upload and determine what
+            should be present in the assessment.
           </p>
         </div>
       </div>
@@ -190,28 +227,28 @@ export default function NewAssessmentPage() {
         .input {
           width: 100%;
           border-radius: 0.875rem;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgb(226 232 240);
+          background: white;
           padding: 0.8rem 1rem;
           font-size: 0.875rem;
-          color: white;
+          color: rgb(15 23 42);
           outline: none;
           transition:
             border-color 150ms ease,
-            background 150ms ease;
+            box-shadow 150ms ease;
         }
 
         .input::placeholder {
-          color: rgb(71 85 105);
+          color: rgb(148 163 184);
         }
 
         .input:focus {
-          border-color: rgba(255, 255, 255, 0.25);
-          background: rgba(255, 255, 255, 0.06);
+          border-color: rgb(129 140 248);
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
         select.input {
-          color-scheme: dark;
+          color-scheme: light;
         }
       `}</style>
     </main>
@@ -229,9 +266,14 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-slate-300">
+      <label className="mb-2 block text-sm font-medium text-slate-700">
         {label}
-        {required && <span className="ml-1 text-indigo-300">*</span>}
+
+        {required && (
+          <span className="ml-1 text-indigo-600">
+            *
+          </span>
+        )}
       </label>
 
       {children}
