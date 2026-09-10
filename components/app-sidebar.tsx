@@ -25,6 +25,10 @@ export function AppSidebar({
     pathname === "/assessments/new" ||
     pathname.startsWith("/assessments/");
 
+  const isStudents =
+    pathname === "/students" ||
+    pathname.startsWith("/students/");
+
   const isSettings = pathname === "/settings";
 
   const isCurrentAssessment =
@@ -33,6 +37,9 @@ export function AppSidebar({
 
   const [assessmentExpanded, setAssessmentExpanded] =
     useState(isAssessments);
+
+  const [studentExpanded, setStudentExpanded] =
+    useState(isStudents);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-white lg:block">
@@ -55,7 +62,6 @@ export function AppSidebar({
         {/* NAVIGATION */}
         <nav className="flex-1 overflow-y-auto px-4 py-6">
 
-          {/* WORKSPACE */}
           <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
             Workspace
           </p>
@@ -73,31 +79,45 @@ export function AppSidebar({
 
             {/* ASSESSMENTS */}
             <div>
-              <button
-                type="button"
-                onClick={() =>
-                  setAssessmentExpanded(
-                    (value) => !value
-                  )
-                }
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
-                  isAssessments
-                    ? "bg-slate-100 text-slate-950"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
-                }`}
-              >
-                <span className="flex h-5 w-5 items-center justify-center">
-                  <AssessmentIcon />
-                </span>
+              <div className="flex items-center">
+                <Link
+                  href="/assessments"
+                  className={`flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                    isAssessments
+                      ? "bg-slate-100 text-slate-950"
+                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
+                  }`}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    <AssessmentIcon />
+                  </span>
 
-                <span className="flex-1 text-left">
-                  Assessments
-                </span>
+                  <span>Assessments</span>
+                </Link>
 
-                <ChevronIcon
-                  open={assessmentExpanded}
-                />
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAssessmentExpanded(
+                      (value) => !value
+                    )
+                  }
+                  aria-label={
+                    assessmentExpanded
+                      ? "Collapse assessments"
+                      : "Expand assessments"
+                  }
+                  className={`mr-1 flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                    isAssessments
+                      ? "text-slate-700 hover:bg-slate-200"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  }`}
+                >
+                  <ChevronIcon
+                    open={assessmentExpanded}
+                  />
+                </button>
+              </div>
 
               {assessmentExpanded && (
                 <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
@@ -128,6 +148,108 @@ export function AppSidebar({
               )}
             </div>
 
+            {/* STUDENTS */}
+            <div>
+              <div className="flex items-center">
+                <Link
+                  href="/students"
+                  className={`flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                    isStudents
+                      ? "bg-slate-100 text-slate-950"
+                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-950"
+                  }`}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    <StudentsIcon />
+                  </span>
+
+                  <span>Students</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setStudentExpanded(
+                      (value) => !value
+                    )
+                  }
+                  aria-label={
+                    studentExpanded
+                      ? "Collapse students"
+                      : "Expand students"
+                  }
+                  className={`mr-1 flex h-8 w-8 items-center justify-center rounded-lg transition ${
+                    isStudents
+                      ? "text-slate-700 hover:bg-slate-200"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  }`}
+                >
+                  <ChevronIcon
+                    open={studentExpanded}
+                  />
+                </button>
+              </div>
+
+              {studentExpanded && (
+                <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+
+                  {/* COHORTS */}
+                  <SidebarLink
+                    href="/students"
+                    active={
+                      pathname === "/students" ||
+                      pathname.startsWith(
+                        "/students/cohorts/"
+                      )
+                    }
+                    icon={<CohortIcon />}
+                    compact
+                  >
+                    Cohorts
+                  </SidebarLink>
+
+                  {/* ALL STUDENTS */}
+                  <SidebarLink
+                    href="/students/all"
+                    active={
+                      pathname === "/students/all"
+                    }
+                    icon={<ListIcon />}
+                    compact
+                  >
+                    All students
+                  </SidebarLink>
+
+                  {/* PERFORMANCE */}
+                  <SidebarLink
+                    href="/students/performance"
+                    active={
+                      pathname ===
+                      "/students/performance"
+                    }
+                    icon={<PerformanceIcon />}
+                    compact
+                  >
+                    Performance
+                  </SidebarLink>
+
+                  {/* SUPPORT */}
+                  <SidebarLink
+                    href="/students/support"
+                    active={
+                      pathname ===
+                      "/students/support"
+                    }
+                    icon={<SupportIcon />}
+                    compact
+                  >
+                    Support
+                  </SidebarLink>
+
+                </div>
+              )}
+            </div>
+
             {/* SETTINGS */}
             <SidebarLink
               href="/settings"
@@ -147,7 +269,6 @@ export function AppSidebar({
                 Current assessment
               </p>
 
-              {/* ASSESSMENT NAME */}
               <div className="mx-3 mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                 <p className="truncate text-sm font-semibold text-slate-950">
                   {assessment.name}
@@ -158,7 +279,6 @@ export function AppSidebar({
                 </p>
               </div>
 
-              {/* ASSESSMENT NAV */}
               <div className="space-y-1">
 
                 <SidebarLink
@@ -233,6 +353,10 @@ export function AppSidebar({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Sidebar link                                                               */
+/* -------------------------------------------------------------------------- */
+
 function SidebarLink({
   href,
   active,
@@ -268,7 +392,9 @@ function SidebarLink({
   );
 }
 
-/* ---------------- Icons ---------------- */
+/* -------------------------------------------------------------------------- */
+/* Icons                                                                      */
+/* -------------------------------------------------------------------------- */
 
 function DashboardIcon() {
   return (
@@ -310,7 +436,7 @@ function AssessmentIcon() {
   );
 }
 
-function IssuesIcon() {
+function StudentsIcon() {
   return (
     <svg
       width="18"
@@ -322,9 +448,70 @@ function IssuesIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M10.3 3.6 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z" />
-      <path d="M12 9v4" />
-      <path d="M12 17h.01" />
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function CohortIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+      <circle cx="7" cy="6" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="11" cy="18" r="1" />
+    </svg>
+  );
+}
+
+function PerformanceIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 19V5" />
+      <path d="M4 19h16" />
+      <path d="m7 15 4-4 3 2 5-6" />
+    </svg>
+  );
+}
+
+function SupportIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
     </svg>
   );
 }
@@ -342,7 +529,8 @@ function SettingsIcon() {
       strokeLinejoin="round"
     >
       <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.6v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.6h.4A1.7 1.7 0 0 0 8 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.6v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.4V14h-.4a1.7 1.7 0 0 0-1.6 1Z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 1.7-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V20h-2.4v-.2a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-1.7-1.7.06-.06A1.7 1.7 0 0 0 8.46 15a1.7 1.7 0 0 0-1.56-1.03H6v-2.4h.9a1.7 1.7 0 0 0 1.56-1.03 1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.7-1.7.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 12.73 5.7V5h2.4v.7a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.7 1.7-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03H22v2.4h-.9A1.7 1.7 0 0 0 19.4 15Z"
+      />
     </svg>
   );
 }
@@ -350,8 +538,8 @@ function SettingsIcon() {
 function ListIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="17"
+      height="17"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -372,8 +560,8 @@ function ListIcon() {
 function PlusIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="17"
+      height="17"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -390,8 +578,8 @@ function PlusIcon() {
 function OverviewIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="17"
+      height="17"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -399,10 +587,10 @@ function OverviewIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M8 8h8" />
-      <path d="M8 12h8" />
-      <path d="M8 16h5" />
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 9h8" />
+      <path d="M8 13h5" />
+      <path d="M8 17h6" />
     </svg>
   );
 }
@@ -410,8 +598,8 @@ function OverviewIcon() {
 function ReconciliationIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="17"
+      height="17"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -419,10 +607,29 @@ function ReconciliationIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M3 7h13" />
-      <path d="m12 3 4 4-4 4" />
-      <path d="M21 17H8" />
-      <path d="m12 13-4 4 4 4" />
+      <path d="M7 7h11l-3-3" />
+      <path d="M17 17H6l3 3" />
+      <path d="M18 7a6 6 0 0 1 0 10" />
+      <path d="M6 17A6 6 0 0 1 6 7" />
+    </svg>
+  );
+}
+
+function IssuesIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m10.3 3.6-7.7 13.4a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
   );
 }
@@ -430,8 +637,8 @@ function ReconciliationIcon() {
 function ReadinessIcon() {
   return (
     <svg
-      width="16"
-      height="16"
+      width="17"
+      height="17"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -439,8 +646,8 @@ function ReadinessIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="m5 12 4 4L19 6" />
       <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 3 3 5-6" />
     </svg>
   );
 }
