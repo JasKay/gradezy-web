@@ -206,8 +206,10 @@ export function WorkflowWorkspace({
     const load = () => {
       try {
         let loaded = removeSamples(readWorkflow(localStorage));
-        if (!loaded.students.length && !loaded.assessments.length && localStorage.getItem("gradezy_practice_opt_out") !== "true") {
-          loaded = saveWorkflow(populatePracticeData(loaded), localStorage);
+        if (localStorage.getItem("gradezy_practice_opt_out") !== "true" && localStorage.getItem("gradezy_tracker_examples_v2") !== "true") {
+          const populated = populatePracticeData(loaded);
+          if (populated !== loaded) loaded = saveWorkflow(populated, localStorage);
+          localStorage.setItem("gradezy_tracker_examples_v2", "true");
         }
         setW(loaded);
         setDate(today());

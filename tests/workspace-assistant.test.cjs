@@ -102,3 +102,30 @@ test('ready-for-review and needs-marking queries select outstanding work', () =>
   assert.ok(searchWorkspace(w, 'Who needs to be reviewed?', date).answer.startsWith(reviews + ' results ready for review.'));
   assert.ok(searchWorkspace(w, 'Who needs marking?', date).answer.startsWith(awaiting + ' submitted records awaiting marking.'));
 });
+
+test('existing student-only practice workspaces gain assessment and marking examples without losing edits', () => {
+  const w = fixture();
+  w.students[0].firstName = 'Edited';
+  w.assessments = [];
+  w.markers = [];
+  w.learningProgress = [];
+  const repaired = p.populatePracticeData(w, date);
+  assert.equal(repaired.students.length, 36);
+  assert.equal(repaired.students[0].firstName, 'Edited');
+  assert.equal(repaired.assessments.length, 18);
+  assert.equal(repaired.markers.length, 3);
+  assert.equal(repaired.learningProgress.length, 36);
+  assert.equal(repaired.imports.length, 4);
+  assert.equal(p.populatePracticeData(repaired, date), repaired);
+});
+
+test('restoring tracker examples preserves edited assessment records', () => {
+  const w = fixture();
+  w.assessments[0].name = 'Edited assessment';
+  w.assessments[0].records[0].notes = 'Keep this note';
+  w.assessments.pop();
+  const repaired = p.populatePracticeData(w, date);
+  assert.equal(repaired.assessments.length, 18);
+  assert.equal(repaired.assessments[0].name, 'Edited assessment');
+  assert.equal(repaired.assessments[0].records[0].notes, 'Keep this note');
+});

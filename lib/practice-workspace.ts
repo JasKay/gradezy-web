@@ -11,8 +11,6 @@ const courses = [
 ];
 const prefix = "practice-";
 export function populatePracticeData(w: Workflow, date = today()): Workflow {
-  if (w.students.some((s) => s.id.startsWith(prefix)))
-    return w;
   const next = structuredClone(w);
   const iso = (days: number) => {
     const d = new Date(date + "T12:00:00Z");
@@ -28,6 +26,9 @@ export function populatePracticeData(w: Workflow, date = today()): Workflow {
           ["Hughes", "Price", "Davies", "Harris", "Roberts", "Wood", "Scott", "Hill", "Green", "Baker", "Young", "King"],
           ["Walker", "Wright", "Allen", "Hall", "Edwards", "Cooper", "Ward", "Mitchell", "Phillips", "James", "Watson", "Bell"],
         ][index - 1][c * 4 + i];
+        const id = prefix + "student-" + c + "-" + index + "-" + i;
+        const existing = next.students.find((s) => s.id === id);
+        if (existing) return existing;
         let number = 260001 + c * 12 + index * 4 + i;
         while (next.students.some((s) => s.ncgId === "NCG" + number))
           number += 100000;
@@ -44,7 +45,7 @@ export function populatePracticeData(w: Workflow, date = today()): Workflow {
           },
         });
       });
-      next.students.push(...students);
+      next.students.push(...students.filter((student) => !next.students.some((existing) => existing.id === student.id)));
       for (let attempt = 0; attempt < 2; attempt++) {
         const issueDate = iso(-(c === 0 ? 24 : c === 1 ? 12 : 4) + attempt * 3).slice(0, 10);
         const a: Assessment = {
@@ -76,7 +77,7 @@ export function populatePracticeData(w: Workflow, date = today()): Workflow {
             }, resubmission: {} };
           if (attempt === 0) {
             next.learningProgress ||= [];
-            next.learningProgress.push({ assessmentId: a.id, studentId: student.id, values: {
+            if (!next.learningProgress.some((p) => p.assessmentId === a.id && p.studentId === student.id)) next.learningProgress.push({ assessmentId: a.id, studentId: student.id, values: {
                 task1: "Research plan", progress1: state === 3 ? "Needs support" : "Complete",
                 lecturerComment1: state === 3 ? "Arrange a check-in about the draft." : "Research approach agreed.",
                 retentionComment1: state === 3 ? "Contact student this week." : "",
@@ -86,7 +87,7 @@ export function populatePracticeData(w: Workflow, date = today()): Workflow {
           }
           return r;
         });
-        next.assessments.push(a);
+        if (!next.assessments.some((existing) => existing.id === a.id)) next.assessments.push(a);
       }
     });
   });
@@ -96,8 +97,10 @@ export function populatePracticeData(w: Workflow, date = today()): Workflow {
     { fileName: "Assessment schedule.xlsx", kind: "assessments" as const, rows: 18 },
     { fileName: "Module progress.xlsx", kind: "learning" as const, rows: 36 },
     { fileName: "Marking allocation.xlsx", kind: "marking" as const, rows: 72 },
-  ].forEach((entry) => next.imports!.push({ ...entry, id: prefix + entry.kind, sheetName: "Tracker", system: "Practice workbook", at: iso(-1) }));
-  return next;
+  ].forEach((entry) => {
+    if (!next.imports!.some((existing) => existing.id === prefix + entry.kind)) next.imports!.push({ ...entry, id: prefix + entry.kind, sheetName: "Tracker", system: "Practice workbook", at: iso(-1) });
+  });
+  return JSON.stringify(next) === JSON.stringify(w) ? w : next;
 }
 export function removePracticeData(w: Workflow): Workflow {
   const next = structuredClone(w);

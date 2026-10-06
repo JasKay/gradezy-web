@@ -58,6 +58,28 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal((await saved()).students.length, 37);
     await page.getByRole('button', { name: 'Load practice records', exact: true }).click();
     assert.equal((await saved()).students.length, 37);
+    // Simulate an existing student-only browser workspace from before this update.
+    await page.evaluate(() => {
+      const w = JSON.parse(localStorage.getItem('gradezy_workflow_v1'));
+      w.students = w.students.filter(s => s.ncgId === 'OWN001');
+      w.assessments = []; w.markers = []; w.learningProgress = []; w.imports = [];
+      localStorage.setItem('gradezy_workflow_v1', JSON.stringify(w));
+      localStorage.removeItem('gradezy_tracker_examples_v2');
+      localStorage.removeItem('gradezy_practice_opt_out');
+    });
+    await page.goto(base + '/dashboard');
+    await page.getByRole('heading', { name: 'Ask Gradezy', exact: true }).waitFor();
+    w = await saved();
+    assert.equal(w.students.length, 37);
+    assert.equal(w.assessments.length, 18);
+    assert.equal(w.markers.length, 3);
+    assert.equal(w.learningProgress.length, 36);
+    await page.goto(base + '/assessments');
+    await page.getByRole('heading', { name: 'Strategy report', exact: true }).first().waitFor();
+    await page.goto(base + '/marking');
+    await page.getByRole('cell', { name: 'Rachel Adams', exact: true }).first().waitFor();
+    await page.goto(base + '/progress');
+    await page.getByRole('button', { name: 'Update checkpoints', exact: false }).first().waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base + '/dashboard');
     await page.getByRole('heading', { name: 'Ask Gradezy', exact: true }).waitFor();
