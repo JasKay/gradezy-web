@@ -1,5 +1,6 @@
 ﻿"use client";
 import Link from "next/link";
+import { subjectLabel } from "@/lib/ncg-modules";
 import { useState } from "react";
 import {
   SUBJECTS,
@@ -206,7 +207,7 @@ export function SpreadsheetImport({
               "SIMS export",
               "StaffAdvantage export",
             ].map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{subjectLabel(s)}</option>
             ))}
           </select>
         </label>
@@ -232,7 +233,7 @@ export function SpreadsheetImport({
             onChange={(e) => setSubject(e.target.value as Subject)}
           >
             {SUBJECTS.map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{subjectLabel(s)}</option>
             ))}
           </select>
         </label>
@@ -459,7 +460,7 @@ export function CohortDirectory({
           >
             <option value="">All subjects</option>
             {SUBJECTS.map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>{subjectLabel(s)}</option>
             ))}
           </select>
           <input
@@ -672,7 +673,7 @@ export function LearningTracker({
             {!modules.length && <option value="">No modules yet</option>}
             {modules.map((a) => (
               <option key={a.id} value={a.id}>
-                {w.cohorts.find((c) => c.id === a.cohortId)?.name} · {a.subject}{" "}
+                {w.cohorts.find((c) => c.id === a.cohortId)?.name} · {subjectLabel(a.subject)}{" "}
                 · {a.module}
               </option>
             ))}
@@ -911,7 +912,7 @@ export function MarkingTracker({ w }: { w: Workflow; commit: Commit }) {
     <div className="wf-filters">
       <select aria-label="Marking module" value={module} onChange={(e) => setModule(e.target.value)}><option value="">All modules</option>{Array.from(new Set(w.assessments.map((a) => a.module))).map((m) => <option key={m}>{m}</option>)}</select>
       <select aria-label="Marking cohort" value={cohort} onChange={(e) => setCohort(e.target.value)}><option value="">All cohorts</option>{w.cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-      <select aria-label="Marking subject" value={subject} onChange={(e) => setSubject(e.target.value)}><option value="">All subjects</option>{SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
+      <select aria-label="Marking subject" value={subject} onChange={(e) => setSubject(e.target.value)}><option value="">All subjects</option>{SUBJECTS.map((s) => <option key={s} value={s}>{subjectLabel(s)}</option>)}</select>
       <Link className="wf-button" href="/progress">Progress tracker →</Link>
     </div>
     <div className="wf-table-wrap"><table><thead><tr><th>Marker</th><th>Course / module</th><th>Allocated</th><th>Marked</th></tr></thead><tbody>
@@ -919,7 +920,7 @@ export function MarkingTracker({ w }: { w: Workflow; commit: Commit }) {
         const records = assessments.filter((b) => b.module === a.module && b.cohortId === a.cohortId && b.subject === a.subject).flatMap((b) => b.records);
         return Array.from(new Set(records.map((r) => r.markerId))).map((id) => {
           const assigned = records.filter((r) => r.markerId === id);
-          return <tr key={a.id + id}><td>{w.markers.find((m) => m.id === id)?.name || "Unallocated"}</td><td><Link href={"/workflow/" + a.id}>{a.subject} · {a.module}</Link><small>{w.cohorts.find((c) => c.id === a.cohortId)?.name}</small></td><td>{assigned.length}</td><td>{assigned.filter((r) => r.grade !== "").length}</td></tr>;
+          return <tr key={a.id + id}><td>{w.markers.find((m) => m.id === id)?.name || "Unallocated"}</td><td><Link href={"/workflow/" + a.id}>{subjectLabel(a.subject)} · {a.module}</Link><small>{w.cohorts.find((c) => c.id === a.cohortId)?.name}</small></td><td>{assigned.length}</td><td>{assigned.filter((r) => r.grade !== "").length}</td></tr>;
         });
       })}
       {!assessments.some((a) => a.records.length) && <tr><td colSpan={4}>No allocations in this selection.</td></tr>}

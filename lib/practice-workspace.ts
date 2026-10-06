@@ -5,9 +5,9 @@ const names = [
   ["Mia", "Wilson"], ["Oscar", "Evans"], ["Grace", "Thompson"], ["Arthur", "Lewis"],
 ];
 const courses = [
-  { code: "BUS101", module: "Business Strategy", assessment: "Strategy report", marker: "Rachel Adams" },
-  { code: "COM102", module: "Software Development", assessment: "Application portfolio", marker: "Daniel Brooks" },
-  { code: "HSC103", module: "Professional Care Practice", assessment: "Care practice report", marker: "Priya Shah" },
+  { code: "BM301", module: "Business Strategy", assessment: "Strategy report", marker: "Rachel Adams" },
+  { code: "CMP114", module: "Dynamic Website Development", assessment: "Application portfolio", marker: "Daniel Brooks" },
+  { code: "IHS103", module: "Making a Difference: Supporting Individuals with Specific Needs", assessment: "Care practice report", marker: "Priya Shah" },
 ];
 const prefix = "practice-";
 export function populatePracticeData(w: Workflow, date = today()): Workflow {

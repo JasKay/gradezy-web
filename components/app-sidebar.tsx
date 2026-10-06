@@ -32,7 +32,7 @@ export function AppSidebar({
         </Link>
         <nav className="flex-1 overflow-y-auto px-4 py-7">
           <p className="mb-4 px-3 text-[10px] font-semibold tracking-[.18em] text-[#99a99f]">
-            ASSESSMENT OPERATIONS
+            NCG ASSESSMENTS
           </p>
           <div className="space-y-2">
             {routes.map((r) => {

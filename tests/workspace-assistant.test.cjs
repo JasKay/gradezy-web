@@ -47,11 +47,11 @@ test('loading and removing practice records preserves user records and avoids ID
 
 test('missing submissions search respects module and cohort and links the source', () => {
   const w = fixture();
-  const answer = searchWorkspace(w, "Who hasn't submitted BUS101 in Cohort 1?", date);
-  const expected = w.assessments.filter(a => a.module === 'BUS101' && a.cohortId === 'cohort-1').flatMap(a => a.records).filter(r => r.submission !== 'submitted').length;
+  const answer = searchWorkspace(w, "Who hasn't submitted BM301 in Cohort 1?", date);
+  const expected = w.assessments.filter(a => a.module === 'BM301' && a.cohortId === 'cohort-1').flatMap(a => a.records).filter(r => r.submission !== 'submitted').length;
   assert.ok(answer.answer.startsWith(expected + ' outstanding submissions.'));
   assert.ok(answer.links.length > 0);
-  assert.ok(!answer.answer.includes('COM102'));
+  assert.ok(!answer.answer.includes('CMP114'));
 });
 
 test('support search returns only flagged students in the selected cohort', () => {
@@ -82,7 +82,7 @@ test('zero grades are marked and ready for review', () => {
   const w = fixture();
   const a = w.assessments[0];
   a.records[0] = f.updateProgress(a.records[0], { grade: '0', submission: 'submitted', markerId: w.markers[0].id }, w);
-  const answer = searchWorkspace(w, 'Who is marked in BUS101?', date);
+  const answer = searchWorkspace(w, 'Who is marked in BM301?', date);
   assert.ok(answer.answer.includes('grade 0.'));
 });
 

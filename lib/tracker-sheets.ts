@@ -1,3 +1,4 @@
+import { PROGRAMMES, normalizeProgramme, normalizeModuleCode, findNcgModule } from "./ncg-modules";
 ﻿import {
   SUBJECTS,
   canonicalId,
@@ -115,6 +116,8 @@ const aliases: Record<string, string[]> = {
   grade: ["Grade", "Grade (out of 100%)"],
 };
 export function subjectFor(programme: string): Subject | undefined {
+  const programmeCode = normalizeProgramme(programme);
+  if (programmeCode) return PROGRAMMES[programmeCode].subject;
   const key = programme.toLowerCase();
   if (/health.*social|social.*care/.test(key)) return "Health and Social Care";
   if (/comput|software|information technology/.test(key))
@@ -259,19 +262,26 @@ export function applySpreadsheet(
     try {
       if (kind === "assessments") {
         const v = readFields(headers, cells, ASSESSMENT_COLUMNS);
+        v.module = normalizeModuleCode(v.module || "");
+        const ncgModule = findNcgModule(v.module);
+        if (ncgModule) v.moduleName = ncgModule.name;
         const c = cohortFor(next, v.cohort);
         if (!c) throw new Error(`Unknown cohort '${v.cohort}'.`);
-        const subject = subjectFor(v.programme) || selection.subject;
+        const suppliedProgramme = subjectFor(v.programme);
+        if (v.programme && !suppliedProgramme) throw new Error(`Unknown programme '${v.programme}'. Use BM, COMP or HSC.`);
+        const subject = suppliedProgramme || (ncgModule?.programmes.length === 1 ? PROGRAMMES[ncgModule.programmes[0]].subject : selection.subject);
+        if (ncgModule && !ncgModule.programmes.some((code) => PROGRAMMES[code].subject === subject)) throw new Error("The programme does not offer this NCG module.");
         if (!v.module || !v.assessment)
           throw new Error("Module Code and Assessment are required.");
-        const identity = `${c.id}|${v.module}|${v.assessment}`.toLowerCase();
+        const identity = `${c.id}|${subject}|${v.module}|${v.assessment}`.toLowerCase();
         if (seen.has(identity))
           throw new Error("Duplicate assessment in the selected worksheet.");
         seen.add(identity);
         const existing = next.assessments.find(
           (a) =>
             a.cohortId === c.id &&
-            a.module.toLowerCase() === v.module.toLowerCase() &&
+            a.subject === subject &&
+            normalizeModuleCode(a.module).toLowerCase() === v.module.toLowerCase() &&
             a.name.toLowerCase() === v.assessment.toLowerCase(),
         );
         if (existing)

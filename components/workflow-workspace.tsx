@@ -23,6 +23,8 @@ import {
 import { removeSamples } from "@/lib/tracker-sheets";
 import { populatePracticeData } from "@/lib/practice-workspace";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
+import { NcgModuleDirectory } from "@/components/ncg-module-directory";
+import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, alignPracticeModules } from "@/lib/ncg-modules";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -211,6 +213,8 @@ export function WorkflowWorkspace({
           if (populated !== loaded) loaded = saveWorkflow(populated, localStorage);
           localStorage.setItem("gradezy_tracker_examples_v2", "true");
         }
+        const aligned = alignPracticeModules(loaded);
+        if (aligned !== loaded) loaded = saveWorkflow(aligned, localStorage);
         setW(loaded);
         setDate(today());
         setError("");
@@ -253,7 +257,7 @@ export function WorkflowWorkspace({
       <AppSidebar />
       <header className="wf-topbar">
         <div>
-          <span className="wf-eyebrow">ASSESSMENT TEAM / WORKSPACE</span>
+          <span className="wf-eyebrow">NCG / ASSESSMENT WORKSPACE</span>
           <h1>{titles[view]}</h1>
         </div>
         <div className="wf-actions">
@@ -542,6 +546,7 @@ function AssessmentList({
   date: string;
   progress?: boolean;
 }) {
+  const [mode, setMode] = useState<"modules" | "schedule">("modules");
   const [subject, setSubject] = useState("");
   const [cohort, setCohort] = useState("");
   const [search, setSearch] = useState("");
@@ -549,10 +554,15 @@ function AssessmentList({
     (a) =>
       (!subject || a.subject === subject) &&
       (!cohort || a.cohortId === cohort) &&
-      `${a.name} ${a.module}`.toLowerCase().includes(search.toLowerCase()),
+      `${a.name} ${a.module} ${a.operations?.moduleName || findNcgModule(a.module)?.name || ""}`.toLowerCase().includes(search.toLowerCase()),
   );
   return (
     <>
+      {!progress && <nav className="wf-tracker-tabs" aria-label="Assessment tracker views">
+        <button className={mode === "modules" ? "active" : ""} aria-pressed={mode === "modules"} onClick={() => setMode("modules")}>NCG modules</button>
+        <button className={mode === "schedule" ? "active" : ""} aria-pressed={mode === "schedule"} onClick={() => setMode("schedule")}>Assessment schedule</button>
+      </nav>}
+      {!progress && mode === "modules" ? <NcgModuleDirectory w={w} /> : <>
       <div className="wf-heading">
         <h2>
           {progress
@@ -579,7 +589,7 @@ function AssessmentList({
         >
           <option value="">All subjects</option>
           {SUBJECTS.map((s) => (
-            <option key={s}>{s}</option>
+            <option key={s} value={s}>{subjectLabel(s)}</option>
           ))}
         </select>
         <select
@@ -618,7 +628,7 @@ function AssessmentList({
                 <div>
                   <span className="wf-eyebrow">
                     A{w.assessments.indexOf(a) + 1} ·{" "}
-                    {a.subject || "SUBJECT TO CONFIRM"}
+                    {subjectLabel(a.subject) || "PROGRAMME TO CONFIRM"}
                   </span>
                   <h3>{a.name}</h3>
                   <p>
@@ -674,6 +684,7 @@ function AssessmentList({
           ))}
         </div>
       )}
+      </>}
     </>
   );
 }
@@ -689,21 +700,29 @@ function AssessmentForm({
   onClose?: () => void;
 }) {
   const router = useRouter();
-  const [draft, setDraft] = useState<Assessment>(() =>
-    existing
-      ? structuredClone(existing)
-      : {
-          id: "",
-          name: "",
-          module: "",
-          cohortId: w.cohorts[0]?.id || "",
-          subject: SUBJECTS[0],
-          issueDate: today(),
-          offsets: defaultOffsets(),
-          records: [],
-          createdAt: "",
-        },
-  );
+  const [draft, setDraft] = useState<Assessment>(() => {
+    if (existing) return structuredClone(existing);
+    const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+    const ncgModule = findNcgModule(params.get("module") || "");
+    const requested = normalizeProgramme(params.get("programme") || "");
+    const programme = requested && ncgModule?.programmes.includes(requested) ? requested : ncgModule?.programmes[0] || "BM";
+    return {
+      id: "", name: "", module: ncgModule?.code || "", cohortId: w.cohorts[0]?.id || "",
+      subject: PROGRAMMES[programme].subject, issueDate: today(), offsets: defaultOffsets(),
+      records: [], createdAt: "",
+      operations: ncgModule ? { moduleName: ncgModule.name, programme: PROGRAMMES[programme].name } : {},
+    };
+  });
+  function changeModule(value: string) {
+    const code = normalizeModuleCode(value);
+    const ncgModule = findNcgModule(code);
+    const current = programmeForSubject(draft.subject);
+    const programme = ncgModule && (!current || !ncgModule.programmes.includes(current)) ? ncgModule.programmes[0] : current;
+    setDraft({ ...draft, module: code,
+      subject: ncgModule && !existing?.records.length && programme ? PROGRAMMES[programme].subject : draft.subject,
+      operations: { ...draft.operations, moduleName: ncgModule?.name || "", programme: programme ? PROGRAMMES[programme].name : "" },
+    });
+  }
   const [error, setError] = useState("");
   const rosterSize = w.students.filter((s) =>
     s.enrolments.some(
@@ -713,6 +732,9 @@ function AssessmentForm({
   function submit(e: FormEvent) {
     e.preventDefault();
     const errors = validateSchedule(draft);
+    const ncgModule = findNcgModule(draft.module);
+    const programme = programmeForSubject(draft.subject);
+    if (ncgModule && (!programme || !ncgModule.programmes.includes(programme))) errors.push("Choose a programme offered for this NCG module.");
     if (!w.cohorts.some((c) => c.id === draft.cohortId))
       errors.push("Choose a cohort.");
     if (errors.length) return setError(errors.join(" "));
@@ -765,26 +787,34 @@ function AssessmentForm({
               placeholder="e.g. Strategic management report"
             />
           </Field>
-          <Field label="Module / assessment code">
+          <Field label="Module code">
             <input
               required
+              list="ncg-module-options"
               value={draft.module}
-              onChange={(e) => setDraft({ ...draft, module: e.target.value })}
-              placeholder="e.g. BUS101-A1"
+              onChange={(e) => changeModule(e.target.value)}
+              placeholder="e.g. BM101"
             />
           </Field>
-          <Field label="Subject">
+          <datalist id="ncg-module-options">{NCG_MODULES.filter((m) => !draft.subject || m.programmes.some((code) => PROGRAMMES[code].subject === draft.subject)).map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}</datalist>
+          <Field label="Module name">
+            <input value={draft.operations?.moduleName || ""} readOnly={!!findNcgModule(draft.module)} onChange={(e) => setDraft({ ...draft, operations: { ...draft.operations, moduleName: e.target.value } })} />
+          </Field>
+          <Field label="Programme">
             <select
               required
               disabled={!!existing?.records.length && !!existing.subject}
               value={draft.subject}
               onChange={(e) =>
-                setDraft({ ...draft, subject: e.target.value as Subject })
+                setDraft({ ...draft, subject: e.target.value as Subject,
+                  module: findNcgModule(draft.module) && !findNcgModule(draft.module)!.programmes.some((code) => PROGRAMMES[code].subject === e.target.value) ? "" : draft.module,
+                  operations: { ...draft.operations, moduleName: findNcgModule(draft.module) && !findNcgModule(draft.module)!.programmes.some((code) => PROGRAMMES[code].subject === e.target.value) ? "" : draft.operations?.moduleName || "", programme: subjectLabel(e.target.value) },
+                })
               }
             >
-              <option value="">Choose subject</option>
+              <option value="">Choose programme</option>
               {SUBJECTS.map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s} value={s}>{programmeForSubject(s)} - {subjectLabel(s)}</option>
               ))}
             </select>
           </Field>
@@ -902,7 +932,7 @@ function AssessmentDetail({
       <div className="wf-detail-heading">
         <div>
           <span className="wf-eyebrow">
-            {a.subject || "SUBJECT TO CONFIRM"} /{" "}
+            {subjectLabel(a.subject) || "PROGRAMME TO CONFIRM"} /{" "}
             {w.cohorts.find((c) => c.id === a.cohortId)?.name}
           </span>
           <h2>{a.name}</h2>
@@ -1418,7 +1448,7 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
                 }
               >
                 {SUBJECTS.map((s) => (
-                  <option key={s}>{s}</option>
+                  <option key={s} value={s}>{subjectLabel(s)}</option>
                 ))}
               </select>
             </Field>
@@ -1934,7 +1964,7 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
     setAnswerKind("Workspace search");
     const normalizedQuestion = question.toLowerCase();
     const namedPerson = [...w.students.map((s) => s.firstName + " " + s.lastName), ...w.markers.map((m) => m.name)].some((name) => normalizedQuestion.includes(name.toLowerCase()));
-    if (!token.trim() || namedPerson || found.answer.includes("couldn't find") || /\b(who|which students?|NCG\d+|ESL\d+)\b/i.test(question)) {
+    if (!token.trim() || namedPerson || found.links.some((link) => !link.href.startsWith("/workflow/")) || found.answer.includes("couldn't find") || /\b(who|which students?|NCG\d+|ESL\d+)\b/i.test(question)) {
       setAnswer(found.answer);
       setBusy(false);
       return;

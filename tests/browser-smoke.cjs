@@ -102,7 +102,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     .getByLabel("Assessment name", { exact: true })
     .fill("Smoke assessment");
   await page
-    .getByLabel("Module / assessment code", { exact: true })
+    .getByLabel("Module code", { exact: true })
     .fill("SMOKE-A1");
   await page.getByLabel("Issue date", { exact: true }).fill("2026-09-10");
   await page
