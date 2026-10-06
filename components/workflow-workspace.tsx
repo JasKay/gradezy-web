@@ -21,6 +21,8 @@ import {
 } from "@/components/tracker-workspace";
 
 import { removeSamples } from "@/lib/tracker-sheets";
+import { populatePracticeData } from "@/lib/practice-workspace";
+import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -203,7 +205,10 @@ export function WorkflowWorkspace({
   useEffect(() => {
     const load = () => {
       try {
-        const loaded = removeSamples(readWorkflow(localStorage));
+        let loaded = removeSamples(readWorkflow(localStorage));
+        if (!loaded.students.length && !loaded.assessments.length && localStorage.getItem("gradezy_practice_opt_out") !== "true") {
+          loaded = saveWorkflow(populatePracticeData(loaded), localStorage);
+        }
         setW(loaded);
         setDate(today());
         setError("");
@@ -1912,6 +1917,8 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
   );
   const [token, setToken] = useState("");
   const [answer, setAnswer] = useState("");
+  const [answerLinks, setAnswerLinks] = useState<WorkspaceAnswer["links"]>([]);
+  const [answerKind, setAnswerKind] = useState("Workspace search");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const context = assistantContext(w, date);
@@ -1920,19 +1927,13 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
     setBusy(true);
     setError("");
     setAnswer("");
-    if (!token.trim()) {
-      const workload = /balance|workload|marker/i.test(question);
-      const priority = context.assessments.map((a, i) => ({ a, assessment: w.assessments[i] }))
-        .filter(({ a }) => a.status === "Overdue" || a.blockers.length)
-        .sort((x, y) => Number(y.a.status === "Overdue") - Number(x.a.status === "Overdue"))
-        .slice(0, 3);
-      const lines = workload
-        ? context.markerWorkload.filter((m) => m.awaitingMarking > 0).sort((a, b) => b.awaitingMarking - a.awaitingMarking).slice(0, 3).map((m) => {
-            const index = context.markerWorkload.indexOf(m);
-            return w.markers[index].name + ": " + m.awaitingMarking + " awaiting marking of " + m.assigned + " allocated.";
-          })
-        : priority.map(({ a, assessment }) => assessment.module + " / " + assessment.name + ": " + a.status + ". " + (a.blockers.slice(0, 2).join(" ") || "Check outstanding deadlines in the assessment workspace."));
-      setAnswer("Live workspace checks\n" + (lines.length ? lines.join("\n") : "No outstanding issues found in the current records.") + "\nFor a tailored AI answer, configure Assistant access.");
+    const found = searchWorkspace(w, question, date);
+    setAnswerLinks(found.links);
+    setAnswerKind("Workspace search");
+    const normalizedQuestion = question.toLowerCase();
+    const namedPerson = [...w.students.map((s) => s.firstName + " " + s.lastName), ...w.markers.map((m) => m.name)].some((name) => normalizedQuestion.includes(name.toLowerCase()));
+    if (!token.trim() || namedPerson || found.answer.includes("couldn't find") || /\b(who|which students?|NCG\d+|ESL\d+)\b/i.test(question)) {
+      setAnswer(found.answer);
       setBusy(false);
       return;
     }
@@ -1943,14 +1944,17 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ question, context }),
+        body: JSON.stringify({ question, context: { ...context, focusAssessmentReferences: found.links.map((link) => "A" + (w.assessments.findIndex((a) => link.href === "/workflow/" + a.id) + 1)) } }),
         signal: AbortSignal.timeout(60_000),
       });
       const data = await res.json();
       if (!res.ok)
         throw new Error(data.error || "The assistant could not respond.");
       setAnswer(data.answer);
+      setAnswerKind("AI-generated suggestion");
     } catch (e) {
+      setAnswer(found.answer);
+      setAnswerKind("Workspace search");
       setError(e instanceof Error ? e.message : "Assistant unavailable.");
     } finally {
       setBusy(false);
@@ -1967,7 +1971,7 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
               {[
                 "What is overdue and what does it block?",
                 "Suggest how to balance the marking workload.",
-                "Draft a follow-up about outstanding reviews.",
+                "Which students need a progress follow-up?",
               ].map((q) => (
                 <button
                   className="wf-button"
@@ -2014,8 +2018,12 @@ function Assistant({ w, date, compact = false }: { w: Workflow; date: string; co
             )}
             {answer && (
               <div className="wf-answer" aria-live="polite">
-                <Badge tone="green">{answer.startsWith("Live workspace checks") ? "Live workspace checks" : "AI-generated suggestion"}</Badge>
+                <div className="wf-answer-header">
+                  <Badge tone="green">{answerKind}</Badge>
+                  <button type="button" className="wf-text-button" aria-label="Close assistant answer" onClick={() => { setAnswer(""); setAnswerLinks([]); setError(""); }}>Close</button>
+                </div>
                 <p>{answer}</p>
+                <div className="wf-answer-links">{answerLinks.map((link) => <Link key={link.href} href={link.href}>{link.label} &rarr;</Link>)}</div>
                 <button
                   type="button"
                   className="wf-button"

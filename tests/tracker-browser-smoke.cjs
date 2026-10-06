@@ -6,6 +6,7 @@ const fs = require('node:fs');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
   try {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(() => localStorage.setItem("gradezy_practice_opt_out", "true"));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -60,7 +61,7 @@ const fs = require('node:fs');
     await page.goto(base + '/dashboard');
     await page.getByRole('heading', { name: 'Ask Gradezy', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Ask assistant', exact: false }).click();
-    await page.getByText('Live workspace checks', { exact: true }).waitFor();
+    await page.getByText('Workspace search', { exact: true }).waitFor();
     await page.goto(base + '/sources');
     await page.getByRole('heading', { name: 'Integrations', exact: true }).first().waitFor();
     assert.equal(await page.getByText('Planned', { exact: true }).count(), 3);

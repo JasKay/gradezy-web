@@ -15,6 +15,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     acceptDownloads: true,
   });
   await context.addInitScript(() => {
+    localStorage.setItem("gradezy_practice_opt_out", "true");
     if (!localStorage.getItem("gradezy_workflow_v1"))
       localStorage.setItem(
         "gradezy_workflow_v1",

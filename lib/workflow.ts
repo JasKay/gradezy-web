@@ -716,6 +716,16 @@ export function assistantContext(w: Workflow, date = today()) {
       cohort: w.cohorts.find((c) => c.id === a.cohortId)?.name,
       status: assessmentStatus(a, w, date),
       blockers: blockers(a, w),
+      counts: {
+        students: a.records.length,
+        missingSubmissions: a.records.filter((r) => r.submission === "awaiting").length,
+        resubmissions: a.records.filter((r) => r.submission === "resubmission").length,
+        unallocated: a.records.filter((r) => !w.markers.some((m) => m.id === r.markerId)).length,
+        awaitingMarking: a.records.filter((r) => r.submission === "submitted" && !r.grade.trim()).length,
+        awaitingReview: a.records.filter((r) => canReview(r, w) && !isReviewed(r, w)).length,
+        reviewed: a.records.filter((r) => isReviewed(r, w)).length,
+        needsLearningSupport: (w.learningProgress || []).filter((p) => p.assessmentId === a.id && /behind|support|not started/i.test(p.values.progress1 + " " + p.values.progress2)).length,
+      },
       timeline: STAGES.map((s) => ({
         milestone: s.label,
         ...stageProgress(a, w, s.key, date),
@@ -728,7 +738,7 @@ export function assistantContext(w: Workflow, date = today()) {
         .filter((r) => r.markerId === m.id).length,
       awaitingMarking: w.assessments
         .flatMap((a) => a.records)
-        .filter((r) => r.markerId === m.id && !canReview(r, w)).length,
+        .filter((r) => r.markerId === m.id && r.submission === "submitted" && !r.grade.trim()).length,
     })),
     batches: w.batches.map((b) => ({
       rows: b.rows.length,
