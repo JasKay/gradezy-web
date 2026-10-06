@@ -20,12 +20,10 @@ import {
   runReadinessChecks,
   type AssessmentReadiness,
   getReadinessStatusLabel,
-  getReadinessStatusColor,
   getCheckIcon,
-  getCheckColor,
 } from "@/lib/readiness";
 
-import { saveAssessment } from "@/lib/assessment-store";
+import { saveAssessment, getAssessments } from "@/lib/assessment-store";
 import { AppSidebar } from "@/components/app-sidebar";
 
 type Assessment = {
@@ -46,10 +44,7 @@ type StoredIssueStatus = {
   resolvedAt?: string;
 };
 
-type StoredIssueStatuses = Record<
-  string,
-  StoredIssueStatus
->;
+type StoredIssueStatuses = Record<string, StoredIssueStatus>;
 
 export default function ReadinessPage() {
   const params = useParams();
@@ -57,111 +52,105 @@ export default function ReadinessPage() {
 
   const assessmentId = String(params.id);
 
-  const [assessment, setAssessment] =
-    useState<Assessment | null>(null);
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
 
-  const [readiness, setReadiness] =
-    useState<AssessmentReadiness | null>(null);
+  const [readiness, setReadiness] = useState<AssessmentReadiness | null>(null);
 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      /*
-       * Load assessment directly from localStorage.
-       */
-      const storedAssessment = localStorage.getItem(
-        "gradezy_current_assessment"
-      );
-
-      if (!storedAssessment) {
-        setLoading(false);
-        return;
-      }
-
-      const parsedAssessment =
-        JSON.parse(storedAssessment) as Assessment;
-
-      if (parsedAssessment.id !== assessmentId) {
-        setLoading(false);
-        return;
-      }
-
-      setAssessment(parsedAssessment);
-
-      /*
-       * Load expected students.
-       */
-      const expectedJson = localStorage.getItem(
-        `gradezy_students_${assessmentId}`
-      );
-
-      if (!expectedJson) {
-        setLoading(false);
-        return;
-      }
-
-      const expected: ExpectedStudent[] =
-        JSON.parse(expectedJson);
-
-      /*
-       * Load actual students.
-       *
-       * Actual data can be empty. Readiness will then
-       * correctly report that reconciliation is incomplete.
-       */
-      const actualJson = localStorage.getItem(
-        `gradezy_actual_students_${assessmentId}`
-      );
-
-      const actual: ActualStudent[] = actualJson
-        ? JSON.parse(actualJson)
-        : [];
-
-      /*
-       * Run reconciliation.
-       */
-      const reconciliationResults: ReconciliationResult[] =
-        reconcileStudents(expected, actual);
-
-      /*
-       * Generate issues from current reconciliation data.
-       */
-      const generatedIssues =
-        generateIssuesFromReconciliation(
-          assessmentId,
-          reconciliationResults
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        /*
+         * Load assessment directly from localStorage.
+         */
+        const storedAssessment = JSON.stringify(
+          getAssessments().find((item) => item.id === assessmentId) || null,
         );
 
-      /*
-       * Load saved issue workflow statuses.
-       */
-      const issueStatusKey =
-        `gradezy_issue_statuses_${assessmentId}`;
-
-      const storedStatusesJson =
-        localStorage.getItem(issueStatusKey);
-
-      let storedStatuses: StoredIssueStatuses = {};
-
-      if (storedStatusesJson) {
-        try {
-          storedStatuses = JSON.parse(
-            storedStatusesJson
-          ) as StoredIssueStatuses;
-        } catch (error) {
-          console.error(
-            "Failed to parse saved issue statuses:",
-            error
-          );
+        if (!storedAssessment) {
+          setLoading(false);
+          return;
         }
-      }
 
-      /*
-       * Merge saved statuses onto generated issues.
-       */
-      const issues: Issue[] = generatedIssues.map(
-        (issue) => {
+        const parsedAssessment = JSON.parse(storedAssessment) as Assessment;
+
+        if (!parsedAssessment || parsedAssessment.id !== assessmentId) {
+          setLoading(false);
+          return;
+        }
+
+        setAssessment(parsedAssessment);
+
+        /*
+         * Load expected students.
+         */
+        const expectedJson = localStorage.getItem(
+          `gradezy_students_${assessmentId}`,
+        );
+
+        if (!expectedJson) {
+          setLoading(false);
+          return;
+        }
+
+        const expected: ExpectedStudent[] = JSON.parse(expectedJson);
+
+        /*
+         * Load actual students.
+         *
+         * Actual data can be empty. Readiness will then
+         * correctly report that reconciliation is incomplete.
+         */
+        const actualJson = localStorage.getItem(
+          `gradezy_actual_students_${assessmentId}`,
+        );
+
+        const actual: ActualStudent[] = actualJson
+          ? JSON.parse(actualJson)
+          : [];
+
+        /*
+         * Run reconciliation.
+         */
+        const reconciliationResults: ReconciliationResult[] = reconcileStudents(
+          expected,
+          actual,
+        );
+
+        /*
+         * Generate issues from current reconciliation data.
+         */
+        const generatedIssues = generateIssuesFromReconciliation(
+          assessmentId,
+          reconciliationResults,
+        );
+
+        /*
+         * Load saved issue workflow statuses.
+         */
+        const issueStatusKey = `gradezy_issue_statuses_${assessmentId}`;
+
+        const storedStatusesJson = localStorage.getItem(issueStatusKey);
+
+        let storedStatuses: StoredIssueStatuses = {};
+
+        if (storedStatusesJson) {
+          try {
+            storedStatuses = JSON.parse(
+              storedStatusesJson,
+            ) as StoredIssueStatuses;
+          } catch (error) {
+            console.error("Failed to parse saved issue statuses:", error);
+          }
+        }
+
+        /*
+         * Merge saved statuses onto generated issues.
+         */
+        const issues: Issue[] = generatedIssues.map((issue) => {
           const savedStatus = storedStatuses[issue.id];
 
           if (!savedStatus) {
@@ -173,30 +162,30 @@ export default function ReadinessPage() {
             status: savedStatus.status,
             resolvedAt: savedStatus.resolvedAt,
           };
-        }
-      );
+        });
 
-      /*
-       * Run readiness engine.
-       */
-      const result = runReadinessChecks(
-        parsedAssessment,
-        expected.length,
-        actual.length,
-        reconciliationResults.length,
-        issues
-      );
+        /*
+         * Run readiness engine.
+         */
+        const result = runReadinessChecks(
+          parsedAssessment,
+          expected.length,
+          actual.length,
+          reconciliationResults.length,
+          issues,
+        );
 
-      setReadiness(result);
-      setLoading(false);
-    } catch (error) {
-      console.error(
-        "Failed to calculate assessment readiness:",
-        error
-      );
+        setReadiness(result);
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to calculate assessment readiness:", error);
 
-      setLoading(false);
-    }
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [assessmentId]);
 
   function handlePublish() {
@@ -212,8 +201,8 @@ export default function ReadinessPage() {
     }
 
     try {
-      const storedAssessment = localStorage.getItem(
-        "gradezy_current_assessment"
+      const storedAssessment = JSON.stringify(
+        getAssessments().find((item) => item.id === assessmentId) || null,
       );
 
       if (storedAssessment) {
@@ -230,10 +219,7 @@ export default function ReadinessPage() {
 
       router.push("/assessments");
     } catch (error) {
-      console.error(
-        "Failed to publish assessment:",
-        error
-      );
+      console.error("Failed to publish assessment:", error);
     }
   }
 
@@ -249,9 +235,7 @@ export default function ReadinessPage() {
           <div className="flex items-center gap-3">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
 
-            <p className="text-sm text-slate-500">
-              Checking readiness...
-            </p>
+            <p className="text-sm text-slate-500">Checking readiness...</p>
           </div>
         </div>
       </main>
@@ -269,9 +253,7 @@ export default function ReadinessPage() {
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
           <button
             type="button"
-            onClick={() =>
-              router.push("/assessments")
-            }
+            onClick={() => router.push("/assessments")}
             className="mb-6 text-sm font-medium text-slate-500 transition hover:text-slate-950"
           >
             ← Back to assessments
@@ -287,9 +269,8 @@ export default function ReadinessPage() {
             </h1>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-              We couldn't find the assessment associated
-              with this page. Return to your assessments and
-              try again.
+              We couldn&apos;t find the assessment associated with this page.
+              Return to your assessments and try again.
             </p>
           </div>
         </div>
@@ -315,9 +296,7 @@ export default function ReadinessPage() {
           <button
             type="button"
             onClick={() =>
-              router.push(
-                `/assessments/${assessment.id}/reconciliation`
-              )
+              router.push(`/assessments/${assessment.id}/reconciliation`)
             }
             className="mb-6 text-sm font-medium text-slate-500 transition hover:text-slate-950"
           >
@@ -334,9 +313,8 @@ export default function ReadinessPage() {
             </h1>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-              Gradezy could not calculate readiness for this
-              assessment. Check that your expected student
-              data has been uploaded and try again.
+              Gradezy could not calculate readiness for this assessment. Check
+              that your expected student data has been uploaded and try again.
             </p>
           </div>
         </div>
@@ -344,15 +322,11 @@ export default function ReadinessPage() {
     );
   }
 
-  const isReady =
-    readiness.overallStatus === "ready";
+  const isReady = readiness.overallStatus === "ready";
 
-  const isAtRisk =
-    readiness.overallStatus === "at_risk";
+  const isAtRisk = readiness.overallStatus === "at_risk";
 
-  const statusLabel = getReadinessStatusLabel(
-    readiness.overallStatus
-  );
+  const statusLabel = getReadinessStatusLabel(readiness.overallStatus);
 
   /*
    * Use the readiness engine's existing status colour
@@ -399,8 +373,7 @@ export default function ReadinessPage() {
         <header className="flex min-h-20 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
           <div className="min-w-0">
             <p className="text-sm text-slate-500">
-              {assessment.module} · {assessment.level} ·{" "}
-              {assessment.cohort}
+              {assessment.module} · {assessment.level} · {assessment.cohort}
             </p>
 
             <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950">
@@ -410,11 +383,7 @@ export default function ReadinessPage() {
 
           <button
             type="button"
-            onClick={() =>
-              router.push(
-                `/assessments/${assessment.id}/issues`
-              )
-            }
+            onClick={() => router.push(`/assessments/${assessment.id}/issues`)}
             className="hidden shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 sm:block"
           >
             Review issues
@@ -452,11 +421,7 @@ export default function ReadinessPage() {
                     <span
                       className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm ${statusTone.text}`}
                     >
-                      {isReady ? (
-                        <CheckIcon />
-                      ) : (
-                        <WarningIcon />
-                      )}
+                      {isReady ? <CheckIcon /> : <WarningIcon />}
                     </span>
 
                     <p
@@ -471,8 +436,7 @@ export default function ReadinessPage() {
                   </p>
 
                   <p className="mt-2 text-sm text-slate-500">
-                    {readiness.percentComplete}% of
-                    requirements met
+                    {readiness.percentComplete}% of requirements met
                   </p>
                 </div>
 
@@ -495,9 +459,7 @@ export default function ReadinessPage() {
               {/* Progress */}
               <div className="mt-8">
                 <div className="flex items-center justify-between text-xs font-medium">
-                  <span className="text-slate-500">
-                    Readiness progress
-                  </span>
+                  <span className="text-slate-500">Readiness progress</span>
 
                   <span className={statusTone.text}>
                     {readiness.percentComplete}%
@@ -510,10 +472,7 @@ export default function ReadinessPage() {
                     style={{
                       width: `${Math.min(
                         100,
-                        Math.max(
-                          0,
-                          readiness.percentComplete
-                        )
+                        Math.max(0, readiness.percentComplete),
                       )}%`,
                     }}
                   />
@@ -534,21 +493,16 @@ export default function ReadinessPage() {
               </h3>
 
               <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                Gradezy checks these conditions before an
-                assessment can be considered ready.
+                Gradezy checks these conditions before an assessment can be
+                considered ready.
               </p>
             </div>
 
             <div className="space-y-3">
               {readiness.checks.map((check) => {
-                const checkPassed =
-                  check.status === "passed" ||
-                  check.status === "complete" ||
-                  check.status === "ready";
+                const checkPassed = check.status === "pass";
 
-                const checkFailed =
-                  check.status === "failed" ||
-                  check.status === "blocked";
+                const checkFailed = check.status === "fail";
 
                 return (
                   <div
@@ -585,9 +539,7 @@ export default function ReadinessPage() {
                                   : "border-amber-200 bg-amber-50 text-amber-700"
                             }`}
                           >
-                            {getCheckStatusLabel(
-                              check.status
-                            )}
+                            {getCheckStatusLabel(check.status)}
                           </span>
                         </div>
 
@@ -627,27 +579,20 @@ export default function ReadinessPage() {
 
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-950">
-                      {readiness.criticalIssuesRemaining}{" "}
-                      Critical Issue
-                      {readiness.criticalIssuesRemaining ===
-                      1
-                        ? ""
-                        : "s"}{" "}
+                      {readiness.criticalIssuesRemaining} Critical Issue
+                      {readiness.criticalIssuesRemaining === 1 ? "" : "s"}{" "}
                       Remaining
                     </h3>
 
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                      Critical issues must be resolved before
-                      this assessment can be considered ready
-                      for publication.
+                      Critical issues must be resolved before this assessment
+                      can be considered ready for publication.
                     </p>
 
                     <button
                       type="button"
                       onClick={() =>
-                        router.push(
-                          `/assessments/${assessment.id}/issues`
-                        )
+                        router.push(`/assessments/${assessment.id}/issues`)
                       }
                       className="mt-5 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
@@ -675,9 +620,8 @@ export default function ReadinessPage() {
                   </div>
 
                   <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-                    This assessment has passed the required
-                    readiness checks and can now be published
-                    to instructors.
+                    This assessment has passed the required readiness checks and
+                    can now be published to instructors.
                   </p>
                 </div>
 
@@ -698,24 +642,19 @@ export default function ReadinessPage() {
               <div className="flex flex-col justify-between gap-5 rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-7 sm:flex-row sm:items-center">
                 <div>
                   <p className="font-semibold text-slate-950">
-                    {isAtRisk
-                      ? "Almost there"
-                      : "Keep going"}
+                    {isAtRisk ? "Almost there" : "Keep going"}
                   </p>
 
                   <p className="mt-1 max-w-xl text-sm leading-6 text-slate-500">
-                    Review the outstanding requirements and
-                    resolve the issues preventing this
-                    assessment from being ready.
+                    Review the outstanding requirements and resolve the issues
+                    preventing this assessment from being ready.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() =>
-                    router.push(
-                      `/assessments/${assessment.id}/issues`
-                    )
+                    router.push(`/assessments/${assessment.id}/issues`)
                   }
                   className="shrink-0 rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
@@ -738,44 +677,28 @@ export default function ReadinessPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <DetailCard
-                label="Module"
-                value={assessment.module}
-              />
+              <DetailCard label="Module" value={assessment.module} />
 
-              <DetailCard
-                label="Level"
-                value={assessment.level}
-              />
+              <DetailCard label="Level" value={assessment.level} />
 
-              <DetailCard
-                label="Cohort"
-                value={assessment.cohort}
-              />
+              <DetailCard label="Cohort" value={assessment.cohort} />
 
               <DetailCard
                 label="Status"
-                value={
-                  assessment.status === "ready"
-                    ? "Ready"
-                    : statusLabel
-                }
+                value={assessment.status === "ready" ? "Ready" : statusLabel}
               />
             </div>
 
-            {assessment.status === "ready" &&
-              assessment.readyAt && (
-                <p className="mt-5 text-xs text-slate-400">
-                  Marked ready on{" "}
-                  {new Date(
-                    assessment.readyAt
-                  ).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
-              )}
+            {assessment.status === "ready" && assessment.readyAt && (
+              <p className="mt-5 text-xs text-slate-400">
+                Marked ready on{" "}
+                {new Date(assessment.readyAt).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            )}
           </section>
         </div>
       </div>
@@ -787,13 +710,7 @@ export default function ReadinessPage() {
 /* Helper components                                                          */
 /* -------------------------------------------------------------------------- */
 
-function DetailCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-[0.1em] text-slate-400">
@@ -807,9 +724,7 @@ function DetailCard({
   );
 }
 
-function getCheckStatusLabel(
-  status: string
-): string {
+function getCheckStatusLabel(status: string): string {
   switch (status) {
     case "passed":
     case "complete":

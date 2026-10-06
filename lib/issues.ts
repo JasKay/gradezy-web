@@ -5,9 +5,7 @@
  * and manages their lifecycle (open, in review, resolved, dismissed).
  */
 
-import {
-  ReconciliationResult,
-} from "./reconciliation";
+import { ReconciliationResult } from "./reconciliation";
 
 export type IssueSeverity = "critical" | "warning" | "info";
 
@@ -53,26 +51,24 @@ export type Issue = {
  * built out.
  */
 export function generateIssuesFromReconciliation(
-  results: ReconciliationResult[]
+  results: ReconciliationResult[],
 ): Issue[];
 
 export function generateIssuesFromReconciliation(
   assessmentId: string,
-  results: ReconciliationResult[]
+  results: ReconciliationResult[],
 ): Issue[];
 
 export function generateIssuesFromReconciliation(
   assessmentIdOrResults: string | ReconciliationResult[],
-  maybeResults?: ReconciliationResult[]
+  maybeResults?: ReconciliationResult[],
 ): Issue[] {
   const assessmentId =
-    typeof assessmentIdOrResults === "string"
-      ? assessmentIdOrResults
-      : "";
+    typeof assessmentIdOrResults === "string" ? assessmentIdOrResults : "";
 
   const results =
     typeof assessmentIdOrResults === "string"
-      ? maybeResults ?? []
+      ? (maybeResults ?? [])
       : assessmentIdOrResults;
 
   const issues: Issue[] = [];
@@ -162,13 +158,29 @@ export function generateIssuesFromReconciliation(
         }
         break;
 
+      case "grade_mismatch":
       case "matched":
         if (
           result.expectedStudent &&
           result.actualStudents[0] &&
-          result.expectedStudent.grade.trim() &&
+          !result.actualStudents[0].grade?.trim()
+        ) {
+          issues.push({
+            ...baseIssue,
+            id: `missing-grade-${result.id}`,
+            type: "missing_grade",
+            severity: "critical",
+            title: "Student grade is missing",
+            description: "The matched student has no recorded grade.",
+            expectedStudentNcgId: result.expectedStudent.ncgId,
+          });
+        }
+        if (
+          result.expectedStudent &&
+          result.actualStudents[0] &&
+          (result.expectedStudent.grade || "").trim() &&
           result.actualStudents[0].grade?.trim() &&
-          result.expectedStudent.grade.trim().toLowerCase() !==
+          (result.expectedStudent.grade || "").trim().toLowerCase() !==
             result.actualStudents[0].grade.trim().toLowerCase()
         ) {
           issues.push({
@@ -194,7 +206,7 @@ export function generateIssuesFromReconciliation(
  */
 export function filterByIssueStatus(
   issues: Issue[],
-  status: IssueStatus | "all"
+  status: IssueStatus | "all",
 ): Issue[] {
   if (status === "all") {
     return issues;
@@ -208,7 +220,7 @@ export function filterByIssueStatus(
  */
 export function filterByIssueType(
   issues: Issue[],
-  type: IssueType | "all"
+  type: IssueType | "all",
 ): Issue[] {
   if (type === "all") {
     return issues;
@@ -278,7 +290,7 @@ export function getIssueStatusColor(status: IssueStatus): string {
  * Count issues by severity.
  */
 export function countBySeverity(
-  issues: Issue[]
+  issues: Issue[],
 ): Record<IssueSeverity, number> {
   return {
     critical: issues.filter((issue) => issue.severity === "critical").length,
@@ -290,9 +302,7 @@ export function countBySeverity(
 /**
  * Count issues by status.
  */
-export function countByStatus(
-  issues: Issue[]
-): Record<IssueStatus, number> {
+export function countByStatus(issues: Issue[]): Record<IssueStatus, number> {
   return {
     open: issues.filter((issue) => issue.status === "open").length,
     in_review: issues.filter((issue) => issue.status === "in_review").length,

@@ -10,33 +10,32 @@ import {
 } from "@/lib/student-analytics";
 
 export default function StudentSupportPage() {
-  const [students, setStudents] = useState<
-    StudentProfile[]
-  >([]);
+  const [students, setStudents] = useState<StudentProfile[]>([]);
 
   useEffect(() => {
-    setStudents(
-      getStudentsNeedingAttention()
-    );
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStudents(getStudentsNeedingAttention());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const critical = useMemo(
     () =>
       students.filter((student) =>
         student.indicators.some(
-          (indicator) =>
-            indicator.severity === "critical"
-        )
+          (indicator) => indicator.severity === "critical",
+        ),
       ),
-    [students]
+    [students],
   );
 
   const missingGrades = useMemo(
-    () =>
-      students.filter(
-        (student) => student.missingGrades > 0
-      ),
-    [students]
+    () => students.filter((student) => student.missingGrades > 0),
+    [students],
   );
 
   return (
@@ -46,9 +45,7 @@ export default function StudentSupportPage() {
       <div>
         <header className="flex min-h-20 items-center border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
           <div>
-            <p className="text-sm text-slate-500">
-              Students
-            </p>
+            <p className="text-sm text-slate-500">Students</p>
 
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
               Support
@@ -57,7 +54,6 @@ export default function StudentSupportPage() {
         </header>
 
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-
           <section>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-600">
               Student support
@@ -68,9 +64,8 @@ export default function StudentSupportPage() {
             </h2>
 
             <p className="mt-3 max-w-2xl text-slate-500">
-              Focus on students with performance indicators,
-              missing grades or other signals that may require
-              follow-up.
+              Focus on students with performance indicators, missing grades or
+              other signals that may require follow-up.
             </p>
           </section>
 
@@ -80,9 +75,7 @@ export default function StudentSupportPage() {
               value={students.length.toLocaleString()}
               detail="Students with indicators"
               valueClass={
-                students.length > 0
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                students.length > 0 ? "text-amber-600" : "text-emerald-600"
               }
             />
 
@@ -91,9 +84,7 @@ export default function StudentSupportPage() {
               value={critical.length.toLocaleString()}
               detail="Critical indicators"
               valueClass={
-                critical.length > 0
-                  ? "text-red-600"
-                  : "text-emerald-600"
+                critical.length > 0 ? "text-red-600" : "text-emerald-600"
               }
             />
 
@@ -102,9 +93,7 @@ export default function StudentSupportPage() {
               value={missingGrades.length.toLocaleString()}
               detail="Students with missing grades"
               valueClass={
-                missingGrades.length > 0
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                missingGrades.length > 0 ? "text-amber-600" : "text-emerald-600"
               }
             />
           </section>
@@ -120,17 +109,13 @@ export default function StudentSupportPage() {
               </h3>
 
               <p className="mt-1 text-sm text-slate-500">
-                Open a student profile to understand the
-                underlying signals.
+                Open a student profile to understand the underlying signals.
               </p>
             </div>
 
             <div className="mt-5 space-y-3">
               {students.map((student) => (
-                <SupportStudent
-                  key={student.ncgId}
-                  student={student}
-                />
+                <SupportStudent key={student.ncgId} student={student} />
               ))}
             </div>
 
@@ -147,45 +132,34 @@ export default function StudentSupportPage() {
                     </p>
 
                     <p className="mt-1 text-sm text-slate-500">
-                      There are no student indicators requiring
-                      attention.
+                      There are no student indicators requiring attention.
                     </p>
                   </div>
                 </div>
               </div>
             )}
           </section>
-
         </div>
       </div>
     </main>
   );
 }
 
-function SupportStudent({
-  student,
-}: {
-  student: StudentProfile;
-}) {
+function SupportStudent({ student }: { student: StudentProfile }) {
   const critical = student.indicators.some(
-    (indicator) =>
-      indicator.severity === "critical"
+    (indicator) => indicator.severity === "critical",
   );
 
   return (
     <Link
-      href={`/students/${encodeURIComponent(
-        student.ncgId
-      )}`}
+      href={`/students/${encodeURIComponent(student.ncgId)}`}
       className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
     >
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-
         <div>
           <div className="flex items-center gap-3">
             <h4 className="font-semibold text-slate-950">
-              {student.firstName}{" "}
-              {student.lastName}
+              {student.firstName} {student.lastName}
             </h4>
 
             <span
@@ -195,15 +169,11 @@ function SupportStudent({
                   : "border-amber-200 bg-amber-50 text-amber-700"
               }`}
             >
-              {critical
-                ? "At risk"
-                : "Needs attention"}
+              {critical ? "At risk" : "Needs attention"}
             </span>
           </div>
 
-          <p className="mt-1 text-xs text-slate-400">
-            {student.ncgId}
-          </p>
+          <p className="mt-1 text-xs text-slate-400">{student.ncgId}</p>
         </div>
 
         <div className="grid grid-cols-3 gap-5">
@@ -216,20 +186,12 @@ function SupportStudent({
             }
           />
 
-          <MiniMetric
-            label="Missing"
-            value={student.missingGrades}
-          />
+          <MiniMetric label="Missing" value={student.missingGrades} />
 
-          <MiniMetric
-            label="Indicators"
-            value={student.indicators.length}
-          />
+          <MiniMetric label="Indicators" value={student.indicators.length} />
         </div>
 
-        <span className="text-sm font-semibold text-slate-950">
-          Review →
-        </span>
+        <span className="text-sm font-semibold text-slate-950">Review →</span>
       </div>
     </Link>
   );
@@ -244,13 +206,9 @@ function MiniMetric({
 }) {
   return (
     <div>
-      <p className="text-xs text-slate-400">
-        {label}
-      </p>
+      <p className="text-xs text-slate-400">{label}</p>
 
-      <p className="mt-1 text-sm font-semibold text-slate-950">
-        {value}
-      </p>
+      <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -268,19 +226,13 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm text-slate-500">
-        {label}
-      </p>
+      <p className="text-sm text-slate-500">{label}</p>
 
-      <p
-        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
-      >
+      <p className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-400">
-        {detail}
-      </p>
+      <p className="mt-2 text-xs text-slate-400">{detail}</p>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   isExtensionAvailable,
-  requestGradesFromExtension,
+  requestStudentsFromExtension,
 } from "@/lib/extension-communication";
 import { getAssessments } from "@/lib/assessment-store";
 
@@ -58,72 +58,75 @@ export default function AssessmentPage() {
    * The URL `/assessments/[id]` is the source of truth.
    */
   useEffect(() => {
-    const storedAssessments = getAssessments();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const storedAssessments = getAssessments();
 
-    const selectedAssessment = storedAssessments.find(
-      (item) => String(item.id) === assessmentId
-    );
-
-    if (selectedAssessment) {
-      setAssessment(selectedAssessment as Assessment);
-    } else {
-      console.error(
-        `Assessment with ID "${assessmentId}" was not found.`
+      const selectedAssessment = storedAssessments.find(
+        (item) => String(item.id) === assessmentId,
       );
-      setAssessment(null);
-    }
 
-    /*
-     * Load expected students for this specific assessment.
-     */
-    const expectedRaw = localStorage.getItem(
-      `gradezy_students_${assessmentId}`
-    );
-
-    if (expectedRaw) {
-      try {
-        const parsedExpected = JSON.parse(
-          expectedRaw
-        ) as ExpectedStudent[];
-
-        setStudents(parsedExpected);
-      } catch (err) {
-        console.error("Failed to load expected students:", err);
+      if (selectedAssessment) {
+        setAssessment(selectedAssessment as Assessment);
+      } else {
+        console.error(`Assessment with ID "${assessmentId}" was not found.`);
+        setAssessment(null);
       }
-    } else {
-      setStudents([]);
-    }
 
-    /*
-     * Load actual students for this specific assessment.
-     */
-    const actualRaw = localStorage.getItem(
-      `gradezy_actual_students_${assessmentId}`
-    );
+      /*
+       * Load expected students for this specific assessment.
+       */
+      const expectedRaw = localStorage.getItem(
+        `gradezy_students_${assessmentId}`,
+      );
 
-    if (actualRaw) {
-      try {
-        const parsedActual = JSON.parse(actualRaw) as ActualStudent[];
+      if (expectedRaw) {
+        try {
+          const parsedExpected = JSON.parse(expectedRaw) as ExpectedStudent[];
 
-        setActualStudents(parsedActual);
-      } catch (err) {
-        console.error("Failed to load actual students:", err);
+          setStudents(parsedExpected);
+        } catch (err) {
+          console.error("Failed to load expected students:", err);
+        }
+      } else {
+        setStudents([]);
       }
-    } else {
-      setActualStudents([]);
-    }
 
-    /*
-     * Check whether the Gradezy browser extension is available.
-     */
-    setExtensionAvailable(isExtensionAvailable());
+      /*
+       * Load actual students for this specific assessment.
+       */
+      const actualRaw = localStorage.getItem(
+        `gradezy_actual_students_${assessmentId}`,
+      );
+
+      if (actualRaw) {
+        try {
+          const parsedActual = JSON.parse(actualRaw) as ActualStudent[];
+
+          setActualStudents(parsedActual);
+        } catch (err) {
+          console.error("Failed to load actual students:", err);
+        }
+      } else {
+        setActualStudents([]);
+      }
+
+      /*
+       * Check whether the Gradezy browser extension is available.
+       */
+      setExtensionAvailable(isExtensionAvailable());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [assessmentId]);
 
   /*
    * Handle expected student file upload.
    */
   const handleExpectedFileUpload = async (
-    event: ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
 
@@ -167,58 +170,50 @@ export default function AssessmentPage() {
               header === "ncgid" ||
               header === "student id" ||
               header === "studentid" ||
-              header === "id"
+              header === "id",
           );
 
           const firstNameIndex = headers.findIndex(
             (header) =>
               header === "first name" ||
               header === "firstname" ||
-              header === "forename"
+              header === "forename",
           );
 
           const lastNameIndex = headers.findIndex(
             (header) =>
               header === "last name" ||
               header === "lastname" ||
-              header === "surname"
+              header === "surname",
           );
 
           if (ncgIdIndex === -1) {
-            throw new Error(
-              "Could not find an NCG ID / Student ID column."
-            );
+            throw new Error("Could not find an NCG ID / Student ID column.");
           }
 
           parsedStudents = lines.slice(1).map((line) => {
-            const values = line.split(",").map((value) =>
-              value.trim().replace(/^"|"$/g, "")
-            );
+            const values = line
+              .split(",")
+              .map((value) => value.trim().replace(/^"|"$/g, ""));
 
             return {
+              grade: "",
               ncgId: values[ncgIdIndex] || "",
               firstName:
-                firstNameIndex >= 0
-                  ? values[firstNameIndex] || ""
-                  : "",
-              lastName:
-                lastNameIndex >= 0
-                  ? values[lastNameIndex] || ""
-                  : "",
+                firstNameIndex >= 0 ? values[firstNameIndex] || "" : "",
+              lastName: lastNameIndex >= 0 ? values[lastNameIndex] || "" : "",
             };
           });
         }
       }
 
       if (!parsedStudents.length) {
-        throw new Error(
-          "No students could be found in the uploaded file."
-        );
+        throw new Error("No students could be found in the uploaded file.");
       }
 
       localStorage.setItem(
         `gradezy_students_${assessmentId}`,
-        JSON.stringify(parsedStudents)
+        JSON.stringify(parsedStudents),
       );
 
       setStudents(parsedStudents);
@@ -228,7 +223,7 @@ export default function AssessmentPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to process the expected student file."
+          : "Failed to process the expected student file.",
       );
     } finally {
       setIsUploadingExpected(false);
@@ -239,7 +234,7 @@ export default function AssessmentPage() {
    * Handle actual grades file upload.
    */
   const handleActualFileUpload = async (
-    event: ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
 
@@ -283,21 +278,21 @@ export default function AssessmentPage() {
               header === "ncgid" ||
               header === "student id" ||
               header === "studentid" ||
-              header === "id"
+              header === "id",
           );
 
           const firstNameIndex = headers.findIndex(
             (header) =>
               header === "first name" ||
               header === "firstname" ||
-              header === "forename"
+              header === "forename",
           );
 
           const lastNameIndex = headers.findIndex(
             (header) =>
               header === "last name" ||
               header === "lastname" ||
-              header === "surname"
+              header === "surname",
           );
 
           const gradeIndex = headers.findIndex(
@@ -306,48 +301,36 @@ export default function AssessmentPage() {
               header === "final grade" ||
               header === "finalgrade" ||
               header === "mark" ||
-              header === "score"
+              header === "score",
           );
 
           if (ncgIdIndex === -1) {
-            throw new Error(
-              "Could not find an NCG ID / Student ID column."
-            );
+            throw new Error("Could not find an NCG ID / Student ID column.");
           }
 
           parsedStudents = lines.slice(1).map((line) => {
-            const values = line.split(",").map((value) =>
-              value.trim().replace(/^"|"$/g, "")
-            );
+            const values = line
+              .split(",")
+              .map((value) => value.trim().replace(/^"|"$/g, ""));
 
             return {
               ncgId: values[ncgIdIndex] || "",
               firstName:
-                firstNameIndex >= 0
-                  ? values[firstNameIndex] || ""
-                  : "",
-              lastName:
-                lastNameIndex >= 0
-                  ? values[lastNameIndex] || ""
-                  : "",
-              grade:
-                gradeIndex >= 0
-                  ? values[gradeIndex] || ""
-                  : "",
+                firstNameIndex >= 0 ? values[firstNameIndex] || "" : "",
+              lastName: lastNameIndex >= 0 ? values[lastNameIndex] || "" : "",
+              grade: gradeIndex >= 0 ? values[gradeIndex] || "" : "",
             } as ActualStudent;
           });
         }
       }
 
       if (!parsedStudents.length) {
-        throw new Error(
-          "No grades could be found in the uploaded file."
-        );
+        throw new Error("No grades could be found in the uploaded file.");
       }
 
       localStorage.setItem(
         `gradezy_actual_students_${assessmentId}`,
-        JSON.stringify(parsedStudents)
+        JSON.stringify(parsedStudents),
       );
 
       setActualStudents(parsedStudents);
@@ -357,7 +340,7 @@ export default function AssessmentPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to process the grades file."
+          : "Failed to process the grades file.",
       );
     } finally {
       setIsUploadingActual(false);
@@ -372,17 +355,15 @@ export default function AssessmentPage() {
     setIsImportingFromExtension(true);
 
     try {
-      const importedStudents = await requestGradesFromExtension();
+      const importedStudents = await requestStudentsFromExtension();
 
       if (!importedStudents || !importedStudents.length) {
-        throw new Error(
-          "The Gradezy extension did not return any students."
-        );
+        throw new Error("The Gradezy extension did not return any students.");
       }
 
       localStorage.setItem(
         `gradezy_actual_students_${assessmentId}`,
-        JSON.stringify(importedStudents)
+        JSON.stringify(importedStudents),
       );
 
       setActualStudents(importedStudents);
@@ -392,7 +373,7 @@ export default function AssessmentPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to import grades from the extension."
+          : "Failed to import grades from the extension.",
       );
     } finally {
       setIsImportingFromExtension(false);
@@ -405,9 +386,7 @@ export default function AssessmentPage() {
   const handleRunReconciliation = () => {
     if (!assessment) return;
 
-    router.push(
-      `/assessments/${assessment.id}/reconciliation`
-    );
+    router.push(`/assessments/${assessment.id}/reconciliation`);
   };
 
   /*
@@ -441,8 +420,7 @@ export default function AssessmentPage() {
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              We couldn't find the assessment associated with this
-              link.
+              We couldn&apos;t find the assessment associated with this link.
             </p>
 
             <button
@@ -463,8 +441,10 @@ export default function AssessmentPage() {
       ? reconcileStudents(students, actualStudents)
       : null;
 
-  const matchedCount = reconciliation?.matched?.length ?? 0;
-  const issueCount = reconciliation?.issues?.length ?? 0;
+  const matchedCount =
+    reconciliation?.filter((r) => r.status === "matched").length ?? 0;
+  const issueCount =
+    reconciliation?.filter((r) => r.status !== "matched").length ?? 0;
 
   return (
     <main className="min-h-screen bg-white text-slate-950 lg:pl-64">
@@ -493,9 +473,7 @@ export default function AssessmentPage() {
 
                   <span>/</span>
 
-                  <span className="text-slate-700">
-                    {assessment.name}
-                  </span>
+                  <span className="text-slate-700">{assessment.name}</span>
                 </div>
 
                 <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
@@ -579,8 +557,7 @@ export default function AssessmentPage() {
                   </h2>
 
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Upload the expected student list for this
-                    assessment.
+                    Upload the expected student list for this assessment.
                   </p>
                 </div>
 
@@ -605,9 +582,7 @@ export default function AssessmentPage() {
                         : "Choose expected student file"}
                     </p>
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      CSV or JSON
-                    </p>
+                    <p className="mt-1 text-xs text-slate-400">CSV or JSON</p>
                   </div>
                 </label>
               </div>
@@ -628,8 +603,7 @@ export default function AssessmentPage() {
                   </h2>
 
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Import the grades currently recorded for this
-                    assessment.
+                    Import the grades currently recorded for this assessment.
                   </p>
                 </div>
 
@@ -654,9 +628,7 @@ export default function AssessmentPage() {
                         : "Choose grades file"}
                     </p>
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      CSV or JSON
-                    </p>
+                    <p className="mt-1 text-xs text-slate-400">CSV or JSON</p>
                   </div>
                 </label>
               </div>
@@ -692,8 +664,8 @@ export default function AssessmentPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Compare expected students with the grades
-                    currently recorded.
+                    Compare expected students with the grades currently
+                    recorded.
                   </p>
                 </div>
 
@@ -760,8 +732,7 @@ export default function AssessmentPage() {
                   </p>
 
                   <p className="mt-1 text-sm text-slate-400">
-                    Upload expected students or import grades to
-                    begin.
+                    Upload expected students or import grades to begin.
                   </p>
                 </div>
               ) : (
@@ -792,7 +763,7 @@ export default function AssessmentPage() {
                         const actualStudent = actualStudents.find(
                           (actual) =>
                             String(actual.ncgId).trim() ===
-                            String(student.ncgId).trim()
+                            String(student.ncgId).trim(),
                         );
 
                         const grade = actualStudent?.grade;
@@ -804,8 +775,7 @@ export default function AssessmentPage() {
                           >
                             <td className="px-6 py-4">
                               <div className="font-medium text-slate-900">
-                                {student.firstName}{" "}
-                                {student.lastName}
+                                {student.firstName} {student.lastName}
                               </div>
                             </td>
 

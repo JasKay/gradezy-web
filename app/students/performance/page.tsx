@@ -10,44 +10,39 @@ import {
 } from "@/lib/student-analytics";
 
 export default function StudentPerformancePage() {
-  const [students, setStudents] = useState<
-    StudentProfile[]
-  >([]);
+  const [students, setStudents] = useState<StudentProfile[]>([]);
 
   useEffect(() => {
-    setStudents(getAllStudentProfiles());
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStudents(getAllStudentProfiles());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const stats = useMemo(() => {
     const graded = students.filter(
-      (student) =>
-        student.averageGrade !== undefined
+      (student) => student.averageGrade !== undefined,
     );
 
     const average =
       graded.length > 0
         ? graded.reduce(
-            (sum, student) =>
-              sum +
-              (student.averageGrade || 0),
-            0
+            (sum, student) => sum + (student.averageGrade || 0),
+            0,
           ) / graded.length
         : undefined;
 
     return {
       average,
-      improving: students.filter(
-        (student) =>
-          student.trend === "improving"
-      ).length,
-      stable: students.filter(
-        (student) =>
-          student.trend === "stable"
-      ).length,
-      declining: students.filter(
-        (student) =>
-          student.trend === "declining"
-      ).length,
+      improving: students.filter((student) => student.trend === "improving")
+        .length,
+      stable: students.filter((student) => student.trend === "stable").length,
+      declining: students.filter((student) => student.trend === "declining")
+        .length,
     };
   }, [students]);
 
@@ -58,9 +53,7 @@ export default function StudentPerformancePage() {
       <div>
         <header className="flex min-h-20 items-center border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
           <div>
-            <p className="text-sm text-slate-500">
-              Students
-            </p>
+            <p className="text-sm text-slate-500">Students</p>
 
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
               Performance
@@ -69,7 +62,6 @@ export default function StudentPerformancePage() {
         </header>
 
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-
           <section>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600">
               Student analytics
@@ -80,8 +72,8 @@ export default function StudentPerformancePage() {
             </h2>
 
             <p className="mt-3 max-w-2xl text-slate-500">
-              See how student performance is changing across
-              your assessment data.
+              See how student performance is changing across your assessment
+              data.
             </p>
           </section>
 
@@ -114,9 +106,7 @@ export default function StudentPerformancePage() {
               value={stats.declining.toLocaleString()}
               detail="Performance trending down"
               valueClass={
-                stats.declining > 0
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                stats.declining > 0 ? "text-amber-600" : "text-emerald-600"
               }
             />
           </section>
@@ -168,12 +158,11 @@ export default function StudentPerformancePage() {
                         <td className="px-6 py-4">
                           <Link
                             href={`/students/${encodeURIComponent(
-                              student.ncgId
+                              student.ncgId,
                             )}`}
                             className="font-medium text-slate-950 hover:text-indigo-600"
                           >
-                            {student.firstName}{" "}
-                            {student.lastName}
+                            {student.firstName} {student.lastName}
                           </Link>
 
                           <p className="mt-1 text-xs text-slate-400">
@@ -182,15 +171,13 @@ export default function StudentPerformancePage() {
                         </td>
 
                         <td className="px-6 py-4 text-sm font-medium text-slate-950">
-                          {student.averageGrade !==
-                          undefined
+                          {student.averageGrade !== undefined
                             ? `${student.averageGrade.toFixed(1)}%`
                             : "—"}
                         </td>
 
                         <td className="px-6 py-4 text-sm text-slate-600">
-                          {student.latestGrade !==
-                          undefined
+                          {student.latestGrade !== undefined
                             ? `${student.latestGrade}%`
                             : "—"}
                         </td>
@@ -200,9 +187,7 @@ export default function StudentPerformancePage() {
                         </td>
 
                         <td className="px-6 py-4">
-                          <TrendBadge
-                            trend={student.trend}
-                          />
+                          <TrendBadge trend={student.trend} />
                         </td>
                       </tr>
                     ))}
@@ -217,18 +202,13 @@ export default function StudentPerformancePage() {
               )}
             </div>
           </section>
-
         </div>
       </div>
     </main>
   );
 }
 
-function TrendBadge({
-  trend,
-}: {
-  trend: StudentProfile["trend"];
-}) {
+function TrendBadge({ trend }: { trend: StudentProfile["trend"] }) {
   const classes =
     trend === "improving"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -269,19 +249,13 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm text-slate-500">
-        {label}
-      </p>
+      <p className="text-sm text-slate-500">{label}</p>
 
-      <p
-        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
-      >
+      <p className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-400">
-        {detail}
-      </p>
+      <p className="mt-2 text-xs text-slate-400">{detail}</p>
     </div>
   );
 }

@@ -1,5 +1,4 @@
-export const GRADEZY_EXTENSION_ID =
-  "iocfhndobdbbiemehcnpfnippohngocn";
+export const GRADEZY_EXTENSION_ID = "iocfhndobdbbiemehcnpfnippohngocn";
 
 export type ExtensionStudent = {
   ncgId: string;
@@ -49,9 +48,7 @@ type ChromeRuntime = {
   sendMessage: (
     extensionId: string,
     message: ExtensionMessage,
-    callback: (
-      response: ExtensionResponse<unknown> | undefined
-    ) => void
+    callback: (response: ExtensionResponse<unknown> | undefined) => void,
   ) => void;
 
   lastError?: {
@@ -59,8 +56,8 @@ type ChromeRuntime = {
   };
 
   onMessage?: {
-    addListener: (...args: any[]) => void;
-    removeListener: (...args: any[]) => void;
+    addListener: (...args: unknown[]) => void;
+    removeListener: (...args: unknown[]) => void;
   };
 };
 
@@ -83,53 +80,40 @@ function getChromeRuntime(): ChromeRuntime | null {
 function canUseExtensionMessaging(): boolean {
   const runtime = getChromeRuntime();
 
-  return Boolean(
-    runtime &&
-      typeof runtime.sendMessage === "function"
-  );
+  return Boolean(runtime && typeof runtime.sendMessage === "function");
 }
 
 function sendToExtension<T>(
-  message: ExtensionMessage
+  message: ExtensionMessage,
 ): Promise<ExtensionResponse<T>> {
   return new Promise((resolve, reject) => {
     const runtime = getChromeRuntime();
 
     if (!runtime || !canUseExtensionMessaging()) {
-      reject(
-        new Error(
-          "Gradezy Extension messaging is not available."
-        )
-      );
+      reject(new Error("Gradezy Extension messaging is not available."));
       return;
     }
 
-    runtime.sendMessage(
-      GRADEZY_EXTENSION_ID,
-      message,
-      (response) => {
-        if (runtime.lastError) {
-          reject(
-            new Error(
-              runtime.lastError.message ||
-                "Could not connect to the Gradezy Extension."
-            )
-          );
-          return;
-        }
-
-        if (!response) {
-          reject(
-            new Error(
-              "No response was received from the Gradezy Extension."
-            )
-          );
-          return;
-        }
-
-        resolve(response as ExtensionResponse<T>);
+    runtime.sendMessage(GRADEZY_EXTENSION_ID, message, (response) => {
+      if (runtime.lastError) {
+        reject(
+          new Error(
+            runtime.lastError.message ||
+              "Could not connect to the Gradezy Extension.",
+          ),
+        );
+        return;
       }
-    );
+
+      if (!response) {
+        reject(
+          new Error("No response was received from the Gradezy Extension."),
+        );
+        return;
+      }
+
+      resolve(response as ExtensionResponse<T>);
+    });
   });
 }
 
@@ -167,18 +151,16 @@ export async function pingExtension(): Promise<{
 export async function requestStudentsFromExtension(): Promise<
   ExtensionStudent[]
 > {
-  const response =
-    await sendToExtension<{
-      students?: ExtensionStudent[];
-      count?: number;
-    }>({
-      action: "readStaffAdvantageStudents",
-    });
+  const response = await sendToExtension<{
+    students?: ExtensionStudent[];
+    count?: number;
+  }>({
+    action: "readStaffAdvantageStudents",
+  });
 
   if (!response.success) {
     throw new Error(
-      response.error ||
-        "Could not read student records from StaffAdvantage."
+      response.error || "Could not read student records from StaffAdvantage.",
     );
   }
 
@@ -188,14 +170,11 @@ export async function requestStudentsFromExtension(): Promise<
 /**
  * Gets information about the page currently open in the browser.
  */
-export async function requestPageInfoFromExtension(): Promise<
-  ExtensionPageInfo | null
-> {
+export async function requestPageInfoFromExtension(): Promise<ExtensionPageInfo | null> {
   try {
-    const response =
-      await sendToExtension<ExtensionPageInfo>({
-        action: "getStaffAdvantagePageInfo",
-      });
+    const response = await sendToExtension<ExtensionPageInfo>({
+      action: "getStaffAdvantagePageInfo",
+    });
 
     if (!response.success) {
       return null;
@@ -210,20 +189,16 @@ export async function requestPageInfoFromExtension(): Promise<
 /**
  * Legacy grade request support.
  */
-export async function requestGradesFromExtension(): Promise<
-  GradeData[]
-> {
-  const response =
-    await sendToExtension<{
-      grades?: GradeData[];
-    }>({
-      action: "requestGrades",
-    });
+export async function requestGradesFromExtension(): Promise<GradeData[]> {
+  const response = await sendToExtension<{
+    grades?: GradeData[];
+  }>({
+    action: "requestGrades",
+  });
 
   if (!response.success) {
     throw new Error(
-      response.error ||
-        "Could not retrieve grades from the extension."
+      response.error || "Could not retrieve grades from the extension.",
     );
   }
 
@@ -232,7 +207,7 @@ export async function requestGradesFromExtension(): Promise<
 
 export async function sendGradesToAssessment(
   assessmentId: string,
-  grades: GradeData[]
+  grades: GradeData[],
 ): Promise<void> {
   const response = await sendToExtension({
     action: "sendGradesToAssessment",
@@ -244,8 +219,7 @@ export async function sendGradesToAssessment(
 
   if (!response.success) {
     throw new Error(
-      response.error ||
-        "Could not send grades to the assessment."
+      response.error || "Could not send grades to the assessment.",
     );
   }
 }

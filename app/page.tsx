@@ -390,7 +390,7 @@ export default function Home() {
         </p>
 
         <h2 className="mt-5 text-4xl font-semibold tracking-[-0.03em] sm:text-6xl">
-          Assessment data shouldn't
+          Assessment data shouldn&apos;t
           <br />
           <span className="text-slate-500">require detective work.</span>
         </h2>

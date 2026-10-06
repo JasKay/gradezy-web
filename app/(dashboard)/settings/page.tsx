@@ -7,13 +7,20 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("Assessment Team");
 
   useEffect(() => {
-    const session = JSON.parse(
-      localStorage.getItem("gradezy_session") || "{}"
-    );
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const session = JSON.parse(
+        localStorage.getItem("gradezy_session") || "{}",
+      );
 
-    if (session.email) {
-      setEmail(session.email);
-    }
+      if (session.email) {
+        setEmail(session.email);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -21,13 +28,9 @@ export default function SettingsPage() {
       <AppSidebar />
 
       <header className="min-h-20 border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
-        <p className="text-sm text-slate-500">
-          Workspace
-        </p>
+        <p className="text-sm text-slate-500">Workspace</p>
 
-        <h1 className="mt-1 text-xl font-semibold text-slate-950">
-          Settings
-        </h1>
+        <h1 className="mt-1 text-xl font-semibold text-slate-950">Settings</h1>
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-10">
@@ -50,16 +53,14 @@ export default function SettingsPage() {
                 Signed-in workspace
               </p>
 
-              <p className="mt-1 text-sm text-slate-500">
-                {email}
-              </p>
+              <p className="mt-1 text-sm text-slate-500">{email}</p>
             </div>
           </div>
 
           <div className="mt-7 border-t border-slate-200 pt-6">
             <p className="text-sm leading-6 text-slate-600">
-              Authentication, team members, and integrations will
-              be managed here as Gradezy moves beyond the MVP.
+              Authentication, team members, and integrations will be managed
+              here as Gradezy moves beyond the MVP.
             </p>
           </div>
         </div>

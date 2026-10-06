@@ -1,4 +1,5 @@
 "use client";
+import { getAssessments } from "@/lib/assessment-store";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -27,13 +28,7 @@ type Assessment = {
   createdAt: string;
 };
 
-type Filter =
-  | "all"
-  | "critical"
-  | "warning"
-  | "info"
-  | "open"
-  | "resolved";
+type Filter = "all" | "critical" | "warning" | "info" | "open" | "resolved";
 
 type StoredIssueStatus = {
   status: IssueStatus;
@@ -124,129 +119,118 @@ export default function IssuesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const storedAssessment = localStorage.getItem(
-        "gradezy_current_assessment"
-      );
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const storedAssessment = JSON.stringify(
+          getAssessments().find((item) => item.id === assessmentId) || null,
+        );
 
-      if (storedAssessment) {
-        const parsedAssessment = JSON.parse(
-          storedAssessment
-        ) as Assessment;
+        if (storedAssessment) {
+          const parsedAssessment = JSON.parse(storedAssessment) as Assessment;
 
-        if (parsedAssessment.id === assessmentId) {
-          setAssessment(parsedAssessment);
+          if (parsedAssessment?.id === assessmentId) {
+            setAssessment(parsedAssessment);
+          }
         }
-      }
 
-      const expectedRaw = localStorage.getItem(
-        `gradezy_students_${assessmentId}`
-      );
+        const expectedRaw = localStorage.getItem(
+          `gradezy_students_${assessmentId}`,
+        );
 
-      const actualRaw = localStorage.getItem(
-        `gradezy_actual_students_${assessmentId}`
-      );
+        const actualRaw = localStorage.getItem(
+          `gradezy_actual_students_${assessmentId}`,
+        );
 
-      if (!expectedRaw) {
+        if (!expectedRaw) {
+          setLoading(false);
+          return;
+        }
+
+        const expectedStudents = JSON.parse(expectedRaw) as ExpectedStudent[];
+
+        const actualStudents = actualRaw
+          ? (JSON.parse(actualRaw) as ActualStudent[])
+          : [];
+
+        const reconciliationResults = reconcileStudents(
+          expectedStudents,
+          actualStudents,
+        );
+
+        const generatedIssues = generateIssuesFromReconciliation(
+          assessmentId,
+          reconciliationResults,
+        );
+
+        /*
+         * Load previously saved workflow statuses.
+         *
+         * We only persist mutable workflow state here rather than the
+         * generated issues themselves. That means the issues can always
+         * be regenerated from the latest reconciliation data.
+         */
+        const storedStatusesRaw = localStorage.getItem(issueStatusStorageKey);
+
+        let storedStatuses: StoredIssueStatuses = {};
+
+        if (storedStatusesRaw) {
+          try {
+            storedStatuses = JSON.parse(
+              storedStatusesRaw,
+            ) as StoredIssueStatuses;
+          } catch (statusError) {
+            console.error("Failed to parse saved issue statuses:", statusError);
+          }
+        }
+
+        const issuesWithSavedStatuses = generatedIssues.map((issue) => {
+          const savedStatus = storedStatuses[issue.id];
+
+          if (!savedStatus) {
+            return issue;
+          }
+
+          return {
+            ...issue,
+            status: savedStatus.status,
+            resolvedAt: savedStatus.resolvedAt,
+          };
+        });
+
+        setIssues(issuesWithSavedStatuses);
         setLoading(false);
-        return;
+      } catch (error) {
+        console.error("Failed to load issues:", error);
+        setLoading(false);
       }
-
-      const expectedStudents = JSON.parse(
-        expectedRaw
-      ) as ExpectedStudent[];
-
-      const actualStudents = actualRaw
-        ? (JSON.parse(actualRaw) as ActualStudent[])
-        : [];
-
-      const reconciliationResults = reconcileStudents(
-        expectedStudents,
-        actualStudents
-      );
-
-      const generatedIssues = generateIssuesFromReconciliation(
-        assessmentId,
-        reconciliationResults
-      );
-
-      /*
-       * Load previously saved workflow statuses.
-       *
-       * We only persist mutable workflow state here rather than the
-       * generated issues themselves. That means the issues can always
-       * be regenerated from the latest reconciliation data.
-       */
-      const storedStatusesRaw = localStorage.getItem(
-        issueStatusStorageKey
-      );
-
-      let storedStatuses: StoredIssueStatuses = {};
-
-      if (storedStatusesRaw) {
-        try {
-          storedStatuses = JSON.parse(
-            storedStatusesRaw
-          ) as StoredIssueStatuses;
-        } catch (statusError) {
-          console.error(
-            "Failed to parse saved issue statuses:",
-            statusError
-          );
-        }
-      }
-
-      const issuesWithSavedStatuses = generatedIssues.map((issue) => {
-        const savedStatus = storedStatuses[issue.id];
-
-        if (!savedStatus) {
-          return issue;
-        }
-
-        return {
-          ...issue,
-          status: savedStatus.status,
-          resolvedAt: savedStatus.resolvedAt,
-        };
-      });
-
-      setIssues(issuesWithSavedStatuses);
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to load issues:", error);
-      setLoading(false);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [assessmentId, issueStatusStorageKey]);
 
   const filteredIssues = useMemo(() => {
     switch (filter) {
       case "critical":
-        return issues.filter(
-          (issue) => issue.severity === "critical"
-        );
+        return issues.filter((issue) => issue.severity === "critical");
 
       case "warning":
-        return issues.filter(
-          (issue) => issue.severity === "warning"
-        );
+        return issues.filter((issue) => issue.severity === "warning");
 
       case "info":
-        return issues.filter(
-          (issue) => issue.severity === "info"
-        );
+        return issues.filter((issue) => issue.severity === "info");
 
       case "open":
         return issues.filter(
-          (issue) =>
-            issue.status === "open" ||
-            issue.status === "in_review"
+          (issue) => issue.status === "open" || issue.status === "in_review",
         );
 
       case "resolved":
         return issues.filter(
           (issue) =>
-            issue.status === "resolved" ||
-            issue.status === "dismissed"
+            issue.status === "resolved" || issue.status === "dismissed",
         );
 
       default:
@@ -255,21 +239,17 @@ export default function IssuesPage() {
   }, [issues, filter]);
 
   const criticalCount = issues.filter(
-    (issue) => issue.severity === "critical"
+    (issue) => issue.severity === "critical",
   ).length;
 
   const warningCount = issues.filter(
-    (issue) => issue.severity === "warning"
+    (issue) => issue.severity === "warning",
   ).length;
 
-  const infoCount = issues.filter(
-    (issue) => issue.severity === "info"
-  ).length;
+  const infoCount = issues.filter((issue) => issue.severity === "info").length;
 
   const openCount = issues.filter(
-    (issue) =>
-      issue.status === "open" ||
-      issue.status === "in_review"
+    (issue) => issue.status === "open" || issue.status === "in_review",
   ).length;
 
   function persistIssueStatuses(updatedIssues: Issue[]) {
@@ -278,33 +258,20 @@ export default function IssuesPage() {
     updatedIssues.forEach((issue) => {
       statuses[issue.id] = {
         status: issue.status,
-        ...(issue.resolvedAt
-          ? { resolvedAt: issue.resolvedAt }
-          : {}),
+        ...(issue.resolvedAt ? { resolvedAt: issue.resolvedAt } : {}),
       };
     });
 
     try {
-      localStorage.setItem(
-        issueStatusStorageKey,
-        JSON.stringify(statuses)
-      );
+      localStorage.setItem(issueStatusStorageKey, JSON.stringify(statuses));
     } catch (error) {
-      console.error(
-        "Failed to save issue statuses:",
-        error
-      );
+      console.error("Failed to save issue statuses:", error);
     }
   }
 
-  function updateIssueStatus(
-    issueId: string,
-    status: IssueStatus
-  ) {
+  function updateIssueStatus(issueId: string, status: IssueStatus) {
     const updatedAt =
-      status === "resolved"
-        ? new Date().toISOString()
-        : undefined;
+      status === "resolved" ? new Date().toISOString() : undefined;
 
     setIssues((currentIssues) => {
       const updatedIssues = currentIssues.map((issue) => {
@@ -334,9 +301,7 @@ export default function IssuesPage() {
       return {
         ...currentIssue,
         status,
-        ...(updatedAt
-          ? { resolvedAt: updatedAt }
-          : { resolvedAt: undefined }),
+        ...(updatedAt ? { resolvedAt: updatedAt } : { resolvedAt: undefined }),
       };
     });
   }
@@ -372,7 +337,7 @@ export default function IssuesPage() {
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              We couldn't find the assessment associated with this page.
+              We couldn&apos;t find the assessment associated with this page.
             </p>
           </div>
         </div>
@@ -389,9 +354,7 @@ export default function IssuesPage() {
           <div>
             <button
               onClick={() =>
-                router.push(
-                  `/assessments/${assessmentId}/reconciliation`
-                )
+                router.push(`/assessments/${assessmentId}/reconciliation`)
               }
               className="mb-5 text-sm font-medium text-slate-500 transition hover:text-slate-900"
             >
@@ -421,9 +384,7 @@ export default function IssuesPage() {
 
           <button
             onClick={() =>
-              router.push(
-                `/assessments/${assessmentId}/readiness`
-              )
+              router.push(`/assessments/${assessmentId}/readiness`)
             }
             className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
@@ -586,9 +547,7 @@ export default function IssuesPage() {
 
                             <span>
                               Created{" "}
-                              {new Date(
-                                issue.createdAt
-                              ).toLocaleDateString()}
+                              {new Date(issue.createdAt).toLocaleDateString()}
                             </span>
                           </div>
                         </div>
@@ -609,9 +568,8 @@ export default function IssuesPage() {
         {infoCount > 0 && filter === "all" && (
           <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             {infoCount} informational{" "}
-            {infoCount === 1 ? "issue was" : "issues were"} found.
-            These do not currently prevent the assessment from being
-            considered ready.
+            {infoCount === 1 ? "issue was" : "issues were"} found. These do not
+            currently prevent the assessment from being considered ready.
           </div>
         )}
       </div>
@@ -629,13 +587,10 @@ export default function IssuesPage() {
             <div className="p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-slate-400">
-                    Issue
-                  </p>
+                  <p className="text-sm font-medium text-slate-400">Issue</p>
 
                   <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-                    {selectedIssue.title ||
-                      typeLabel(selectedIssue.type)}
+                    {selectedIssue.title || typeLabel(selectedIssue.type)}
                   </h2>
                 </div>
 
@@ -741,10 +696,7 @@ export default function IssuesPage() {
                 {selectedIssue.status !== "resolved" && (
                   <button
                     onClick={() =>
-                      updateIssueStatus(
-                        selectedIssue.id,
-                        "resolved"
-                      )
+                      updateIssueStatus(selectedIssue.id, "resolved")
                     }
                     className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
@@ -755,10 +707,7 @@ export default function IssuesPage() {
                 {selectedIssue.status === "open" && (
                   <button
                     onClick={() =>
-                      updateIssueStatus(
-                        selectedIssue.id,
-                        "in_review"
-                      )
+                      updateIssueStatus(selectedIssue.id, "in_review")
                     }
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
@@ -769,10 +718,7 @@ export default function IssuesPage() {
                 {selectedIssue.status !== "dismissed" && (
                   <button
                     onClick={() =>
-                      updateIssueStatus(
-                        selectedIssue.id,
-                        "dismissed"
-                      )
+                      updateIssueStatus(selectedIssue.id, "dismissed")
                     }
                     className="w-full rounded-xl px-4 py-3 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
                   >

@@ -14,15 +14,19 @@ import {
 export default function StudentProfilePage() {
   const params = useParams();
 
-  const ncgId = decodeURIComponent(
-    String(params.ncgId)
-  );
+  const ncgId = decodeURIComponent(String(params.ncgId));
 
-  const [student, setStudent] =
-    useState<StudentProfile | null>(null);
+  const [student, setStudent] = useState<StudentProfile | null>(null);
 
   useEffect(() => {
-    setStudent(getStudentProfile(ncgId));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStudent(getStudentProfile(ncgId));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [ncgId]);
 
   if (!student) {
@@ -52,16 +56,9 @@ export default function StudentProfilePage() {
     );
   }
 
-  const critical = student.indicators.filter(
-    (indicator) =>
-      indicator.severity === "critical"
-  );
-
   const latestCohort =
     student.assessments.length > 0
-      ? student.assessments[
-          student.assessments.length - 1
-        ]?.cohort
+      ? student.assessments[student.assessments.length - 1]?.cohort
       : "";
 
   return (
@@ -71,9 +68,7 @@ export default function StudentProfilePage() {
       <div>
         <header className="flex min-h-20 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
           <div>
-            <p className="text-sm text-slate-500">
-              Students · Student profile
-            </p>
+            <p className="text-sm text-slate-500">Students · Student profile</p>
 
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
               {student.firstName} {student.lastName}
@@ -89,43 +84,31 @@ export default function StudentProfilePage() {
         </header>
 
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-
           {/* Profile header */}
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="p-7">
               <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
                 <div className="flex items-center gap-5">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-xl font-semibold text-white">
-                    {student.firstName
-                      ?.charAt(0)
-                      .toUpperCase()}
-                    {student.lastName
-                      ?.charAt(0)
-                      .toUpperCase()}
+                    {student.firstName?.charAt(0).toUpperCase()}
+                    {student.lastName?.charAt(0).toUpperCase()}
                   </div>
 
                   <div>
-                    <p className="text-sm text-slate-500">
-                      Student
-                    </p>
+                    <p className="text-sm text-slate-500">Student</p>
 
                     <h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
-                      {student.firstName}{" "}
-                      {student.lastName}
+                      {student.firstName} {student.lastName}
                     </h2>
 
                     <p className="mt-2 text-sm text-slate-500">
                       {student.ncgId}
-                      {latestCohort
-                        ? ` · ${latestCohort}`
-                        : ""}
+                      {latestCohort ? ` · ${latestCohort}` : ""}
                     </p>
                   </div>
                 </div>
 
-                <Status
-                  student={student}
-                />
+                <Status student={student} />
               </div>
             </div>
           </section>
@@ -183,20 +166,17 @@ export default function StudentProfilePage() {
                 </h3>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Signals generated from the student's
-                  assessment history.
+                  Signals generated from the student&apos;s assessment history.
                 </p>
               </div>
 
               <div className="mt-5 space-y-3">
-                {student.indicators.map(
-                  (indicator, index) => (
-                    <IndicatorCard
-                      key={`${indicator.type}-${index}`}
-                      indicator={indicator}
-                    />
-                  )
-                )}
+                {student.indicators.map((indicator, index) => (
+                  <IndicatorCard
+                    key={`${indicator.type}-${index}`}
+                    indicator={indicator}
+                  />
+                ))}
               </div>
             </section>
           )}
@@ -213,8 +193,7 @@ export default function StudentProfilePage() {
               </h3>
 
               <p className="mt-1 text-sm text-slate-500">
-                A complete view of the student's assessment
-                records.
+                A complete view of the student&apos;s assessment records.
               </p>
             </div>
 
@@ -280,15 +259,13 @@ export default function StudentProfilePage() {
                           </td>
 
                           <td className="px-6 py-4 text-sm font-medium text-slate-950">
-                            {assessment.grade !==
-                            undefined
+                            {assessment.grade !== undefined
                               ? `${assessment.grade}%`
                               : "—"}
                           </td>
 
                           <td className="px-6 py-4">
-                            {assessment.gradeStatus ===
-                            "recorded" ? (
+                            {assessment.gradeStatus === "recorded" ? (
                               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                                 Recorded
                               </span>
@@ -316,14 +293,11 @@ export default function StudentProfilePage() {
               <div className="mt-3 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-2xl font-semibold tracking-tight text-slate-950">
-                    {formatTrend(
-                      student.trend
-                    )}
+                    {formatTrend(student.trend)}
                   </h3>
 
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Based on the student's recorded
-                    assessment grades.
+                    Based on the student&apos;s recorded assessment grades.
                   </p>
                 </div>
 
@@ -336,21 +310,15 @@ export default function StudentProfilePage() {
               </div>
             </div>
           </section>
-
         </div>
       </div>
     </main>
   );
 }
 
-function Status({
-  student,
-}: {
-  student: StudentProfile;
-}) {
+function Status({ student }: { student: StudentProfile }) {
   const critical = student.indicators.some(
-    (indicator) =>
-      indicator.severity === "critical"
+    (indicator) => indicator.severity === "critical",
   );
 
   if (critical) {
@@ -376,27 +344,18 @@ function Status({
   );
 }
 
-function IndicatorCard({
-  indicator,
-}: {
-  indicator: StudentIndicator;
-}) {
-  const critical =
-    indicator.severity === "critical";
+function IndicatorCard({ indicator }: { indicator: StudentIndicator }) {
+  const critical = indicator.severity === "critical";
 
   return (
     <div
       className={`rounded-2xl border p-5 ${
-        critical
-          ? "border-red-200 bg-red-50"
-          : "border-amber-200 bg-amber-50"
+        critical ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
       }`}
     >
       <p
         className={`text-sm font-semibold ${
-          critical
-            ? "text-red-800"
-            : "text-amber-800"
+          critical ? "text-red-800" : "text-amber-800"
         }`}
       >
         {indicator.title}
@@ -404,9 +363,7 @@ function IndicatorCard({
 
       <p
         className={`mt-1 text-sm leading-6 ${
-          critical
-            ? "text-red-700/80"
-            : "text-amber-700/80"
+          critical ? "text-red-700/80" : "text-amber-700/80"
         }`}
       >
         {indicator.description}
@@ -428,26 +385,18 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm text-slate-500">
-        {label}
-      </p>
+      <p className="text-sm text-slate-500">{label}</p>
 
-      <p
-        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
-      >
+      <p className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-400">
-        {detail}
-      </p>
+      <p className="mt-2 text-xs text-slate-400">{detail}</p>
     </div>
   );
 }
 
-function formatTrend(
-  trend: StudentProfile["trend"]
-) {
+function formatTrend(trend: StudentProfile["trend"]) {
   switch (trend) {
     case "improving":
       return "Performance improving";

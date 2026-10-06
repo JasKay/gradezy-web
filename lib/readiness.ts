@@ -4,7 +4,7 @@
  * Verifies that an assessment meets all requirements before publishing
  */
 
-import { Issue, IssueSeverity } from "./issues";
+import { Issue } from "./issues";
 
 export type ReadinessCheckType =
   | "data_complete"
@@ -39,7 +39,7 @@ export type AssessmentReadiness = {
  */
 export function checkDataComplete(
   expectedCount: number,
-  actualCount: number
+  actualCount: number,
 ): ReadinessCheckResult {
   if (expectedCount > 0 && actualCount > 0) {
     return {
@@ -58,7 +58,9 @@ export function checkDataComplete(
     description:
       "Both Progress Tracker (expected students) and assessment system export (actual students) must be uploaded.",
     failureReason:
-      expectedCount === 0 ? "Progress Tracker not uploaded" : "Assessment system data not uploaded",
+      expectedCount === 0
+        ? "Progress Tracker not uploaded"
+        : "Assessment system data not uploaded",
   };
 }
 
@@ -66,7 +68,7 @@ export function checkDataComplete(
  * Check if reconciliation has been completed
  */
 export function checkReconciliationComplete(
-  reconciliationResultsCount: number
+  reconciliationResultsCount: number,
 ): ReadinessCheckResult {
   if (reconciliationResultsCount > 0) {
     return {
@@ -82,7 +84,8 @@ export function checkReconciliationComplete(
     type: "reconciliation_complete",
     status: "fail",
     title: "Reconciliation not completed",
-    description: "Run reconciliation to match expected and actual student data.",
+    description:
+      "Run reconciliation to match expected and actual student data.",
   };
 }
 
@@ -90,10 +93,12 @@ export function checkReconciliationComplete(
  * Check if critical issues are resolved
  */
 export function checkCriticalIssuesResolved(
-  issues: Issue[]
+  issues: Issue[],
 ): ReadinessCheckResult {
   const criticalOpen = issues.filter(
-    (i) => i.severity === "critical" && i.status === "open"
+    (i) =>
+      i.severity === "critical" &&
+      (i.status === "open" || i.status === "in_review"),
   );
 
   if (criticalOpen.length === 0) {
@@ -131,7 +136,9 @@ export function checkMetadataComplete(assessment: {
   dueDate?: string;
 }): ReadinessCheckResult {
   const required = ["name", "module", "level", "cohort", "assessmentType"];
-  const missing = required.filter((field) => !assessment[field as keyof typeof assessment]);
+  const missing = required.filter(
+    (field) => !assessment[field as keyof typeof assessment],
+  );
 
   if (missing.length === 0) {
     return {
@@ -156,7 +163,9 @@ export function checkMetadataComplete(assessment: {
  * Check if there are no pending actions
  */
 export function checkNoPendingActions(issues: Issue[]): ReadinessCheckResult {
-  const inReview = issues.filter((i) => i.status === "in_review");
+  const inReview = issues.filter(
+    (i) => i.status === "in_review" || i.status === "open",
+  );
 
   if (inReview.length === 0) {
     return {
@@ -182,7 +191,7 @@ export function checkNoPendingActions(issues: Issue[]): ReadinessCheckResult {
  */
 export function calculateReadiness(
   checks: ReadinessCheckResult[],
-  criticalIssuesCount: number
+  criticalIssuesCount: number,
 ): "ready" | "not_ready" | "at_risk" {
   const hasFailures = checks.some((c) => c.status === "fail");
   const hasWarnings = checks.some((c) => c.status === "warning");
@@ -214,7 +223,7 @@ export function runReadinessChecks(
   expectedStudentsCount: number,
   actualStudentsCount: number,
   reconciliationResultsCount: number,
-  issues: Issue[]
+  issues: Issue[],
 ): AssessmentReadiness {
   const checks: ReadinessCheckResult[] = [
     checkDataComplete(expectedStudentsCount, actualStudentsCount),
@@ -225,7 +234,9 @@ export function runReadinessChecks(
   ];
 
   const criticalOpen = issues.filter(
-    (i) => i.severity === "critical" && i.status === "open"
+    (i) =>
+      i.severity === "critical" &&
+      (i.status === "open" || i.status === "in_review"),
   ).length;
 
   const overallStatus = calculateReadiness(checks, criticalOpen);
@@ -246,7 +257,9 @@ export function runReadinessChecks(
 /**
  * Get status label
  */
-export function getReadinessStatusLabel(status: "ready" | "not_ready" | "at_risk"): string {
+export function getReadinessStatusLabel(
+  status: "ready" | "not_ready" | "at_risk",
+): string {
   const labels = {
     ready: "Ready to publish",
     not_ready: "Not ready",
@@ -258,7 +271,9 @@ export function getReadinessStatusLabel(status: "ready" | "not_ready" | "at_risk
 /**
  * Get status color
  */
-export function getReadinessStatusColor(status: "ready" | "not_ready" | "at_risk"): string {
+export function getReadinessStatusColor(
+  status: "ready" | "not_ready" | "at_risk",
+): string {
   const colors = {
     ready: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20",
     not_ready: "bg-red-400/10 text-red-300 border-red-400/20",

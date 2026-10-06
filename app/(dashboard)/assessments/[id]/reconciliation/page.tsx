@@ -1,4 +1,5 @@
 "use client";
+import { getAssessments } from "@/lib/assessment-store";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -12,10 +13,7 @@ import {
   type ReconciliationResult,
 } from "@/lib/reconciliation";
 
-import {
-  generateIssuesFromReconciliation,
-  type Issue,
-} from "@/lib/issues";
+import { generateIssuesFromReconciliation, type Issue } from "@/lib/issues";
 
 import {
   pingExtension,
@@ -64,10 +62,7 @@ function normalizeValue(value: unknown) {
   return String(value ?? "").trim();
 }
 
-function getValue(
-  row: Record<string, unknown>,
-  headers: string[],
-) {
+function getValue(row: Record<string, unknown>, headers: string[]) {
   const entry = Object.entries(row).find(([key]) =>
     headers.includes(normalizeHeader(key)),
   );
@@ -80,23 +75,6 @@ function normalizeGrade(value: unknown) {
     .trim()
     .replace(/%/g, "")
     .replace(",", ".");
-}
-
-function gradesMatch(expected: string, actual: string) {
-  const expectedNumber = Number(normalizeGrade(expected));
-  const actualNumber = Number(normalizeGrade(actual));
-
-  if (
-    Number.isFinite(expectedNumber) &&
-    Number.isFinite(actualNumber)
-  ) {
-    return expectedNumber === actualNumber;
-  }
-
-  return (
-    normalizeGrade(expected).toLowerCase() ===
-    normalizeGrade(actual).toLowerCase()
-  );
 }
 
 function getStatusLabel(result: ReconciliationResult) {
@@ -138,17 +116,15 @@ export default function ReconciliationPage() {
 
   const assessmentId = String(params.id);
 
-  const [assessment, setAssessment] =
-    useState<Assessment | null>(null);
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
 
-  const [expectedStudents, setExpectedStudents] =
-    useState<Student[]>([]);
+  const [expectedStudents, setExpectedStudents] = useState<Student[]>([]);
 
-  const [actualStudents, setActualStudents] =
-    useState<ActualStudent[]>([]);
+  const [actualStudents, setActualStudents] = useState<ActualStudent[]>([]);
 
-  const [selectedMethod, setSelectedMethod] =
-    useState<EntryMethod | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<EntryMethod | null>(
+    null,
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,13 +133,15 @@ export default function ReconciliationPage() {
     "checking" | "connected" | "not-installed"
   >("checking");
 
-  const [extensionVersion, setExtensionVersion] =
-    useState<string | undefined>();
+  const [extensionVersion, setExtensionVersion] = useState<
+    string | undefined
+  >();
 
   const [error, setError] = useState("");
 
-  const [reconciliationResults, setReconciliationResults] =
-    useState<ReconciliationResult[]>([]);
+  const [reconciliationResults, setReconciliationResults] = useState<
+    ReconciliationResult[]
+  >([]);
 
   const [filter, setFilter] = useState<FilterType>("all");
 
@@ -196,58 +174,64 @@ export default function ReconciliationPage() {
   };
 
   useEffect(() => {
-    const loadAssessment = () => {
-      try {
-        const storedAssessment =
-          localStorage.getItem("gradezy_current_assessment");
-
-        if (storedAssessment) {
-          const parsed = JSON.parse(storedAssessment);
-
-          if (parsed?.id === assessmentId) {
-            setAssessment(parsed);
-          }
-        }
-
-        const storedStudents = localStorage.getItem(
-          `gradezy_students_${assessmentId}`,
-        );
-
-        if (storedStudents) {
-          setExpectedStudents(JSON.parse(storedStudents));
-        }
-
-        const storedActualStudents = localStorage.getItem(
-          `gradezy_actual_students_${assessmentId}`,
-        );
-
-        if (storedActualStudents) {
-          const parsedActual = JSON.parse(
-            storedActualStudents,
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const loadAssessment = () => {
+        try {
+          const storedAssessment = JSON.stringify(
+            getAssessments().find((item) => item.id === assessmentId) || null,
           );
 
-          setActualStudents(parsedActual);
+          if (storedAssessment) {
+            const parsed = JSON.parse(storedAssessment);
+
+            if (parsed?.id === assessmentId) {
+              setAssessment(parsed);
+            }
+          }
+
+          const storedStudents = localStorage.getItem(
+            `gradezy_students_${assessmentId}`,
+          );
 
           if (storedStudents) {
-            const expected = JSON.parse(storedStudents);
-
-            const results = reconcileStudents(
-              expected as ExpectedStudent[],
-              parsedActual,
-            );
-
-            setReconciliationResults(results);
+            setExpectedStudents(JSON.parse(storedStudents));
           }
-        }
-      } catch {
-        setError("Could not load assessment data.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
 
-    loadAssessment();
-    checkExtension();
+          const storedActualStudents = localStorage.getItem(
+            `gradezy_actual_students_${assessmentId}`,
+          );
+
+          if (storedActualStudents) {
+            const parsedActual = JSON.parse(storedActualStudents);
+
+            setActualStudents(parsedActual);
+
+            if (storedStudents) {
+              const expected = JSON.parse(storedStudents);
+
+              const results = reconcileStudents(
+                expected as ExpectedStudent[],
+                parsedActual,
+              );
+
+              setReconciliationResults(results);
+            }
+          }
+        } catch {
+          setError("Could not load assessment data.");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadAssessment();
+      checkExtension();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [assessmentId]);
 
   useEffect(() => {
@@ -262,27 +246,17 @@ export default function ReconciliationPage() {
     };
 
     window.addEventListener("focus", handleFocus);
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange,
-    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
-  const runReconciliation = (
-    students: ActualStudent[],
-  ) => {
+  const runReconciliation = (students: ActualStudent[]) => {
     if (!expectedStudents.length) {
-      setError(
-        "No expected student list was found for this assessment.",
-      );
+      setError("No expected student list was found for this assessment.");
       return;
     }
 
@@ -344,19 +318,18 @@ export default function ReconciliationPage() {
         type: "array",
       });
 
-      const firstSheet = workbook.Sheets[
-        workbook.SheetNames[0]
-      ];
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
 
       if (!firstSheet) {
         throw new Error("The uploaded file does not contain any data.");
       }
 
-      const rows = XLSX.utils.sheet_to_json<
-        Record<string, unknown>
-      >(firstSheet, {
-        defval: "",
-      });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        firstSheet,
+        {
+          defval: "",
+        },
+      );
 
       if (!rows.length) {
         throw new Error("The uploaded file contains no student records.");
@@ -365,12 +338,7 @@ export default function ReconciliationPage() {
       const students: Student[] = rows
         .map((row) => ({
           ncgId: normalizeValue(
-            getValue(row, [
-              "ncg id",
-              "ncg_id",
-              "ncgid",
-              "ncg-id",
-            ]),
+            getValue(row, ["ncg id", "ncg_id", "ncgid", "ncg-id"]),
           ),
           firstName: normalizeValue(
             getValue(row, [
@@ -406,10 +374,7 @@ export default function ReconciliationPage() {
           ),
         }))
         .filter(
-          (student) =>
-            student.ncgId ||
-            student.firstName ||
-            student.lastName,
+          (student) => student.ncgId || student.firstName || student.lastName,
         );
 
       if (!students.length) {
@@ -462,11 +427,7 @@ export default function ReconciliationPage() {
 
   const handleManualImport = () => {
     const validRows = manualRows.filter(
-      (row) =>
-        row.ncgId ||
-        row.firstName ||
-        row.lastName ||
-        row.grade,
+      (row) => row.ncgId || row.firstName || row.lastName || row.grade,
     );
 
     if (!validRows.length) {
@@ -485,9 +446,7 @@ export default function ReconciliationPage() {
     setSelectedMethod(null);
     setFilter("all");
 
-    localStorage.removeItem(
-      `gradezy_actual_students_${assessmentId}`,
-    );
+    localStorage.removeItem(`gradezy_actual_students_${assessmentId}`);
   };
 
   const summary = useMemo(() => {
@@ -499,9 +458,7 @@ export default function ReconciliationPage() {
   const issues = useMemo<Issue[]>(() => {
     if (!reconciliationResults.length) return [];
 
-    return generateIssuesFromReconciliation(
-      reconciliationResults,
-    );
+    return generateIssuesFromReconciliation(reconciliationResults);
   }, [reconciliationResults]);
 
   const filteredResults = useMemo(() => {
@@ -509,9 +466,7 @@ export default function ReconciliationPage() {
       return reconciliationResults;
     }
 
-    return reconciliationResults.filter(
-      (result) => result.status === filter,
-    );
+    return reconciliationResults.filter((result) => result.status === filter);
   }, [filter, reconciliationResults]);
 
   const hasIssues = issues.length > 0;
@@ -553,9 +508,7 @@ export default function ReconciliationPage() {
             <div className="flex flex-col gap-1">
               <button
                 type="button"
-                onClick={() =>
-                  router.push(`/assessments/${assessmentId}`)
-                }
+                onClick={() => router.push(`/assessments/${assessmentId}`)}
                 className="w-fit text-sm text-slate-400 transition hover:text-slate-700"
               >
                 ← {assessment?.name ?? "Assessment"}
@@ -566,8 +519,7 @@ export default function ReconciliationPage() {
               </h1>
 
               <p className="text-sm text-slate-500">
-                Compare expected students against submitted
-                assessment data.
+                Compare expected students against submitted assessment data.
               </p>
             </div>
           </div>
@@ -636,9 +588,7 @@ export default function ReconciliationPage() {
                   Something needs your attention
                 </p>
 
-                <p className="mt-1 text-sm leading-6 text-red-700">
-                  {error}
-                </p>
+                <p className="mt-1 text-sm leading-6 text-red-700">{error}</p>
               </div>
             </div>
           )}
@@ -651,10 +601,9 @@ export default function ReconciliationPage() {
                 </h2>
 
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                  Choose how you want to bring student results
-                  into Gradezy. Once imported, Gradezy will
-                  automatically identify mismatches and missing
-                  records.
+                  Choose how you want to bring student results into Gradezy.
+                  Once imported, Gradezy will automatically identify mismatches
+                  and missing records.
                 </p>
               </div>
 
@@ -670,13 +619,11 @@ export default function ReconciliationPage() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Upload an Excel or CSV file containing the
-                    student results.
+                    Upload an Excel or CSV file containing the student results.
                   </p>
 
                   <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    {isProcessing &&
-                    selectedMethod === "upload"
+                    {isProcessing && selectedMethod === "upload"
                       ? "Processing..."
                       : "Choose file"}
 
@@ -740,8 +687,7 @@ export default function ReconciliationPage() {
                       </div>
 
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        Import student results directly from
-                        StaffAdvantage.
+                        Import student results directly from StaffAdvantage.
                       </p>
                     </div>
                   </div>
@@ -779,8 +725,7 @@ export default function ReconciliationPage() {
                               </p>
 
                               <p className="mt-1 text-xs leading-5 text-slate-500">
-                                Gradezy can now communicate with
-                                StaffAdvantage.
+                                Gradezy can now communicate with StaffAdvantage.
                               </p>
                             </div>
                           </div>
@@ -837,9 +782,8 @@ export default function ReconciliationPage() {
                           </p>
 
                           <p className="mt-1 text-xs leading-5 text-slate-500">
-                            Install the Gradezy Extension, then
-                            return to this page. Gradezy will
-                            automatically detect it.
+                            Install the Gradezy Extension, then return to this
+                            page. Gradezy will automatically detect it.
                           </p>
                         </div>
 
@@ -884,8 +828,8 @@ export default function ReconciliationPage() {
                   </div>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Connect Gradezy directly to your assessment
-                    system through an API.
+                    Connect Gradezy directly to your assessment system through
+                    an API.
                   </p>
 
                   <button
@@ -908,16 +852,13 @@ export default function ReconciliationPage() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Add student records manually when you only
-                    have a small number of results.
+                    Add student records manually when you only have a small
+                    number of results.
                   </p>
 
                   <div className="mt-6 space-y-3">
                     {manualRows.map((row, index) => (
-                      <div
-                        key={index}
-                        className="grid gap-2 sm:grid-cols-4"
-                      >
+                      <div key={index} className="grid gap-2 sm:grid-cols-4">
                         <input
                           value={row.ncgId}
                           onChange={(event) =>
@@ -1007,9 +948,8 @@ export default function ReconciliationPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Gradezy compared {expectedStudents.length} expected
-                    students against {actualStudents.length} imported
-                    records.
+                    Gradezy compared {expectedStudents.length} expected students
+                    against {actualStudents.length} imported records.
                   </p>
                 </div>
 
@@ -1042,8 +982,8 @@ export default function ReconciliationPage() {
                     label="Needs review"
                     value={
                       summary.missing +
-                      summary.nameMismatches +
-                      summary.gradeMismatches
+                      summary.nameMismatch +
+                      summary.gradeMismatch
                     }
                     description="Potential issues"
                     tone="warning"
@@ -1069,22 +1009,19 @@ export default function ReconciliationPage() {
                     <div className="flex-1">
                       <h3 className="font-semibold text-amber-950">
                         {issues.length} issue
-                        {issues.length === 1 ? "" : "s"} need
-                        review
+                        {issues.length === 1 ? "" : "s"} need review
                       </h3>
 
                       <p className="mt-1 text-sm leading-6 text-amber-800/80">
-                        Gradezy found records that may need to be
-                        corrected before the assessment is ready.
+                        Gradezy found records that may need to be corrected
+                        before the assessment is ready.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() =>
-                        router.push(
-                          `/assessments/${assessmentId}/issues`,
-                        )
+                        router.push(`/assessments/${assessmentId}/issues`)
                       }
                       className="hidden rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 sm:block"
                     >
@@ -1105,8 +1042,8 @@ export default function ReconciliationPage() {
                       </h3>
 
                       <p className="mt-1 text-sm leading-6 text-emerald-800/80">
-                        All imported records align with the
-                        expected student list.
+                        All imported records align with the expected student
+                        list.
                       </p>
                     </div>
                   </div>
@@ -1141,14 +1078,14 @@ export default function ReconciliationPage() {
                     active={filter === "name_mismatch"}
                     onClick={() => setFilter("name_mismatch")}
                     label="Name mismatch"
-                    count={summary?.nameMismatches ?? 0}
+                    count={summary?.nameMismatch ?? 0}
                   />
 
                   <FilterButton
                     active={filter === "grade_mismatch"}
                     onClick={() => setFilter("grade_mismatch")}
                     label="Grade mismatch"
-                    count={summary?.gradeMismatches ?? 0}
+                    count={summary?.gradeMismatch ?? 0}
                   />
 
                   <FilterButton
@@ -1206,29 +1143,20 @@ export default function ReconciliationPage() {
 
                     <tbody className="divide-y divide-slate-100">
                       {filteredResults.map((result, index) => {
-                        const expected = result.expected;
-                        const actual = result.actual;
+                        const expected = result.expectedStudent;
+                        const actual = result.actualStudents[0];
 
                         const firstName =
-                          expected?.firstName ??
-                          actual?.firstName ??
-                          "";
+                          expected?.firstName ?? actual?.firstName ?? "";
 
                         const lastName =
-                          expected?.lastName ??
-                          actual?.lastName ??
-                          "";
+                          expected?.lastName ?? actual?.lastName ?? "";
 
-                        const ncgId =
-                          expected?.ncgId ??
-                          actual?.ncgId ??
-                          "";
+                        const ncgId = expected?.ncgId ?? actual?.ncgId ?? "";
 
-                        const expectedGrade =
-                          expected?.grade ?? "";
+                        const expectedGrade = expected?.grade ?? "";
 
-                        const actualGrade =
-                          actual?.grade ?? "";
+                        const actualGrade = actual?.grade ?? "";
 
                         return (
                           <tr
@@ -1238,12 +1166,8 @@ export default function ReconciliationPage() {
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                                  {(
-                                    firstName?.[0] ?? "?"
-                                  ).toUpperCase()}
-                                  {(
-                                    lastName?.[0] ?? ""
-                                  ).toUpperCase()}
+                                  {(firstName?.[0] ?? "?").toUpperCase()}
+                                  {(lastName?.[0] ?? "").toUpperCase()}
                                 </div>
 
                                 <div>
@@ -1310,13 +1234,13 @@ export default function ReconciliationPage() {
                     <div>
                       <h3 className="font-semibold text-red-950">
                         {summary.missing} student
-                        {summary.missing === 1 ? "" : "s"} missing
-                        from imported data
+                        {summary.missing === 1 ? "" : "s"} missing from imported
+                        data
                       </h3>
 
                       <p className="mt-1 text-sm leading-6 text-red-800/80">
-                        These students appear on the expected list
-                        but were not found in the imported results.
+                        These students appear on the expected list but were not
+                        found in the imported results.
                       </p>
                     </div>
                   </div>
@@ -1330,8 +1254,8 @@ export default function ReconciliationPage() {
                 </h3>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Use the reconciliation results to move through
-                  the remaining assessment checks.
+                  Use the reconciliation results to move through the remaining
+                  assessment checks.
                 </p>
               </div>
 
@@ -1339,9 +1263,7 @@ export default function ReconciliationPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    router.push(
-                      `/assessments/${assessmentId}/issues`,
-                    )
+                    router.push(`/assessments/${assessmentId}/issues`)
                   }
                   className="group rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                 >
@@ -1360,17 +1282,15 @@ export default function ReconciliationPage() {
                   </h4>
 
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Review mismatches, missing students and other
-                    reconciliation findings.
+                    Review mismatches, missing students and other reconciliation
+                    findings.
                   </p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    router.push(
-                      `/assessments/${assessmentId}/readiness`,
-                    )
+                    router.push(`/assessments/${assessmentId}/readiness`)
                   }
                   className="group rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                 >
@@ -1389,8 +1309,7 @@ export default function ReconciliationPage() {
                   </h4>
 
                   <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Run the final checks before publishing the
-                    assessment.
+                    Run the final checks before publishing the assessment.
                   </p>
                 </button>
               </div>
@@ -1424,19 +1343,13 @@ function SummaryCard({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-medium text-slate-500">
-        {label}
-      </p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
 
-      <p
-        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
-      >
+      <p className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>
         {value}
       </p>
 
-      <p className="mt-1 text-xs text-slate-400">
-        {description}
-      </p>
+      <p className="mt-1 text-xs text-slate-400">{description}</p>
     </div>
   );
 }
@@ -1466,9 +1379,7 @@ function FilterButton({
 
       <span
         className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-slate-100 text-slate-500"
+          active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"
         }`}
       >
         {count}
@@ -1529,10 +1440,7 @@ function ApiIcon() {
       <circle cx="6" cy="12" r="2.5" />
       <circle cx="18" cy="6" r="2.5" />
       <circle cx="18" cy="18" r="2.5" />
-      <path
-        d="m8.2 10.8 7.5-3.6M8.2 13.2l7.5 3.6"
-        strokeLinecap="round"
-      />
+      <path d="m8.2 10.8 7.5-3.6M8.2 13.2l7.5 3.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1546,10 +1454,7 @@ function EditIcon() {
       stroke="currentColor"
       strokeWidth="1.8"
     >
-      <path
-        d="M12 20h9"
-        strokeLinecap="round"
-      />
+      <path d="M12 20h9" strokeLinecap="round" />
       <path
         d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z"
         strokeLinecap="round"
@@ -1559,11 +1464,7 @@ function EditIcon() {
   );
 }
 
-function CheckIcon({
-  small = false,
-}: {
-  small?: boolean;
-}) {
+function CheckIcon({ small = false }: { small?: boolean }) {
   return (
     <svg
       className={small ? "h-3.5 w-3.5" : "h-5 w-5"}
@@ -1572,11 +1473,7 @@ function CheckIcon({
       stroke="currentColor"
       strokeWidth="2.4"
     >
-      <path
-        d="m5 12 4 4L19 6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="m5 12 4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1590,17 +1487,9 @@ function SpinnerIcon() {
       stroke="currentColor"
       strokeWidth="2"
     >
-      <circle
-        cx="12"
-        cy="12"
-        r="9"
-        className="opacity-25"
-      />
+      <circle cx="12" cy="12" r="9" className="opacity-25" />
 
-      <path
-        d="M21 12a9 9 0 0 0-9-9"
-        strokeLinecap="round"
-      />
+      <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1620,15 +1509,9 @@ function AlertIcon() {
         strokeLinejoin="round"
       />
 
-      <path
-        d="M12 9v4"
-        strokeLinecap="round"
-      />
+      <path d="M12 9v4" strokeLinecap="round" />
 
-      <path
-        d="M12 17h.01"
-        strokeLinecap="round"
-      />
+      <path d="M12 17h.01" strokeLinecap="round" />
     </svg>
   );
 }

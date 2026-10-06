@@ -14,11 +14,17 @@ type Filter = "all" | "attention" | "risk" | "missing";
 export default function AllStudentsPage() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] =
-    useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
-    setStudents(getAllStudentProfiles());
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStudents(getAllStudentProfiles());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredStudents = useMemo(() => {
@@ -30,9 +36,7 @@ export default function AllStudentsPage() {
         `${student.firstName} ${student.lastName}`
           .toLowerCase()
           .includes(query) ||
-        student.ncgId
-          .toLowerCase()
-          .includes(query);
+        student.ncgId.toLowerCase().includes(query);
 
       if (!matchesSearch) return false;
 
@@ -42,8 +46,7 @@ export default function AllStudentsPage() {
 
       if (filter === "risk") {
         return student.indicators.some(
-          (indicator) =>
-            indicator.severity === "critical"
+          (indicator) => indicator.severity === "critical",
         );
       }
 
@@ -56,18 +59,15 @@ export default function AllStudentsPage() {
   }, [students, search, filter]);
 
   const attentionCount = students.filter(
-    (student) => student.indicators.length > 0
+    (student) => student.indicators.length > 0,
   ).length;
 
   const riskCount = students.filter((student) =>
-    student.indicators.some(
-      (indicator) =>
-        indicator.severity === "critical"
-    )
+    student.indicators.some((indicator) => indicator.severity === "critical"),
   ).length;
 
   const missingCount = students.filter(
-    (student) => student.missingGrades > 0
+    (student) => student.missingGrades > 0,
   ).length;
 
   return (
@@ -77,9 +77,7 @@ export default function AllStudentsPage() {
       <div>
         <header className="flex min-h-20 items-center justify-between border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
           <div>
-            <p className="text-sm text-slate-500">
-              Students
-            </p>
+            <p className="text-sm text-slate-500">Students</p>
 
             <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
               All students
@@ -88,7 +86,6 @@ export default function AllStudentsPage() {
         </header>
 
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
-
           <section>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600">
               Student directory
@@ -99,8 +96,8 @@ export default function AllStudentsPage() {
             </h2>
 
             <p className="mt-3 max-w-2xl text-slate-500">
-              Search and review individual student records
-              across your assessment data.
+              Search and review individual student records across your
+              assessment data.
             </p>
           </section>
 
@@ -117,9 +114,7 @@ export default function AllStudentsPage() {
               value={attentionCount.toLocaleString()}
               detail="One or more indicators"
               valueClass={
-                attentionCount > 0
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                attentionCount > 0 ? "text-amber-600" : "text-emerald-600"
               }
             />
 
@@ -127,11 +122,7 @@ export default function AllStudentsPage() {
               label="At risk"
               value={riskCount.toLocaleString()}
               detail="Critical indicators"
-              valueClass={
-                riskCount > 0
-                  ? "text-red-600"
-                  : "text-emerald-600"
-              }
+              valueClass={riskCount > 0 ? "text-red-600" : "text-emerald-600"}
             />
 
             <Metric
@@ -139,16 +130,13 @@ export default function AllStudentsPage() {
               value={missingCount.toLocaleString()}
               detail="Students with missing grades"
               valueClass={
-                missingCount > 0
-                  ? "text-amber-600"
-                  : "text-emerald-600"
+                missingCount > 0 ? "text-amber-600" : "text-emerald-600"
               }
             />
           </section>
 
           {/* Directory */}
           <section className="mt-12">
-
             <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.15em] text-indigo-600">
@@ -163,9 +151,7 @@ export default function AllStudentsPage() {
               <div className="relative w-full md:max-w-sm">
                 <input
                   value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search name or student ID..."
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50"
                 />
@@ -237,14 +223,9 @@ export default function AllStudentsPage() {
                   </thead>
 
                   <tbody>
-                    {filteredStudents.map(
-                      (student) => (
-                        <StudentRow
-                          key={student.ncgId}
-                          student={student}
-                        />
-                      )
-                    )}
+                    {filteredStudents.map((student) => (
+                      <StudentRow key={student.ncgId} student={student} />
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -261,45 +242,32 @@ export default function AllStudentsPage() {
                 </div>
               )}
             </div>
-
           </section>
-
         </div>
       </div>
     </main>
   );
 }
 
-function StudentRow({
-  student,
-}: {
-  student: StudentProfile;
-}) {
+function StudentRow({ student }: { student: StudentProfile }) {
   const critical = student.indicators.some(
-    (indicator) =>
-      indicator.severity === "critical"
+    (indicator) => indicator.severity === "critical",
   );
 
-  const needsAttention =
-    student.indicators.length > 0;
+  const needsAttention = student.indicators.length > 0;
 
   return (
     <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-
       <td className="px-6 py-4">
         <Link
-          href={`/students/${encodeURIComponent(
-            student.ncgId
-          )}`}
+          href={`/students/${encodeURIComponent(student.ncgId)}`}
           className="font-medium text-slate-950 hover:text-indigo-600"
         >
           {student.firstName} {student.lastName}
         </Link>
       </td>
 
-      <td className="px-6 py-4 text-sm text-slate-500">
-        {student.ncgId}
-      </td>
+      <td className="px-6 py-4 text-sm text-slate-500">{student.ncgId}</td>
 
       <td className="px-6 py-4 text-sm text-slate-600">
         {student.completedAssessments}
@@ -317,28 +285,17 @@ function StudentRow({
 
       <td className="px-6 py-4">
         {critical ? (
-          <StatusBadge
-            label="At risk"
-            type="risk"
-          />
+          <StatusBadge label="At risk" type="risk" />
         ) : needsAttention ? (
-          <StatusBadge
-            label="Needs attention"
-            type="attention"
-          />
+          <StatusBadge label="Needs attention" type="attention" />
         ) : (
-          <StatusBadge
-            label="On track"
-            type="good"
-          />
+          <StatusBadge label="On track" type="good" />
         )}
       </td>
 
       <td className="px-6 py-4 text-right">
         <Link
-          href={`/students/${encodeURIComponent(
-            student.ncgId
-          )}`}
+          href={`/students/${encodeURIComponent(student.ncgId)}`}
           className="text-sm font-semibold text-slate-950 hover:text-indigo-600"
         >
           View →
@@ -408,19 +365,13 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm text-slate-500">
-        {label}
-      </p>
+      <p className="text-sm text-slate-500">{label}</p>
 
-      <p
-        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}
-      >
+      <p className={`mt-3 text-3xl font-semibold tracking-tight ${valueClass}`}>
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-400">
-        {detail}
-      </p>
+      <p className="mt-2 text-xs text-slate-400">{detail}</p>
     </div>
   );
 }

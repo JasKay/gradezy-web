@@ -3,18 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import {
-  getAssessments,
-  type StoredAssessment,
-} from "@/lib/assessment-store";
+import { getAssessments, type StoredAssessment } from "@/lib/assessment-store";
 
 export default function WorkspaceIssuesPage() {
-  const [assessments, setAssessments] = useState<
-    StoredAssessment[]
-  >([]);
+  const [assessments, setAssessments] = useState<StoredAssessment[]>([]);
 
   useEffect(() => {
-    setAssessments(getAssessments());
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setAssessments(getAssessments());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -23,13 +25,9 @@ export default function WorkspaceIssuesPage() {
 
       <header className="flex min-h-20 items-center justify-between border-b border-slate-200 bg-white px-6 py-5 lg:px-10">
         <div>
-          <p className="text-sm text-slate-500">
-            Workspace
-          </p>
+          <p className="text-sm text-slate-500">Workspace</p>
 
-          <h1 className="mt-1 text-xl font-semibold text-slate-950">
-            Issues
-          </h1>
+          <h1 className="mt-1 text-xl font-semibold text-slate-950">Issues</h1>
         </div>
 
         <Link
@@ -50,8 +48,8 @@ export default function WorkspaceIssuesPage() {
         </h2>
 
         <p className="mt-2 text-slate-500">
-          Choose an assessment to inspect and resolve its
-          reconciliation exceptions.
+          Choose an assessment to inspect and resolve its reconciliation
+          exceptions.
         </p>
 
         <div className="mt-8 space-y-3">

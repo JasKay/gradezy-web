@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Gradezy — Assessment Operations Intelligence",
   description:
-    "Gradezy helps assessment teams reconcile data, catch errors and manage exceptions across the systems they already use.",
+    "Gradezy connects cohort enrolments, assessment schedules, marker progress, reviewed grades and upload preparation.",
 };
 
 export default function RootLayout({
