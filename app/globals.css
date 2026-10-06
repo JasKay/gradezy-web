@@ -1072,3 +1072,10 @@ body {
 .wf-module-assessments a { display: block; padding: 8px 0; color: #225c4b; }
 .wf-module-directory .wf-table-wrap { max-height: min(65vh, 620px); overflow: auto; }
 .wf-module-directory thead { position: sticky; top: 0; z-index: 1; background: #f7faf8; }
+
+.wf-module-editor { display: grid; gap: 12px; padding: 12px; max-width: 680px; }
+.wf-module-editor > label { display: grid; gap: 6px; }
+.wf-module-editor > label input { width: 100%; padding: 9px; border: 1px solid #dce5df; border-radius: 8px; }
+.wf-module-editor fieldset { display: flex; flex-wrap: wrap; gap: 10px 20px; border: 1px solid #dce5df; border-radius: 8px; padding: 12px; }
+.wf-module-editor fieldset label { display: flex; align-items: center; gap: 6px; }
+.wf-module-editor-actions { display: flex; gap: 8px; }

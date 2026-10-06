@@ -24,7 +24,7 @@ import { removeSamples } from "@/lib/tracker-sheets";
 import { populatePracticeData } from "@/lib/practice-workspace";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
-import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, alignPracticeModules } from "@/lib/ncg-modules";
+import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, ncgModuleEntries, alignPracticeModules } from "@/lib/ncg-modules";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -286,7 +286,7 @@ export function WorkflowWorkspace({
             Download backup
           </button>
           <Link className="wf-button primary" href="/assessments/new">
-            + New assessment
+            + Add assessment
           </Link>
         </div>
       </header>
@@ -327,7 +327,7 @@ export function WorkflowWorkspace({
           <>
             {view === "overview" && <Overview w={w} date={date} />}
             {view === "assessments" && (
-              <AssessmentList w={w} date={date} progress={false} />
+              <AssessmentList w={w} date={date} progress={false} commit={commit} />
             )}
             {view === "enrolments" && (
               <>
@@ -538,6 +538,7 @@ function Overview({ w, date }: { w: Workflow; date: string }) {
   );
 }
 function AssessmentList({
+  commit,
   w,
   date,
   progress = false,
@@ -545,6 +546,7 @@ function AssessmentList({
   w: Workflow;
   date: string;
   progress?: boolean;
+  commit: Commit;
 }) {
   const [mode, setMode] = useState<"modules" | "schedule">("modules");
   const [subject, setSubject] = useState("");
@@ -562,7 +564,7 @@ function AssessmentList({
         <button className={mode === "modules" ? "active" : ""} aria-pressed={mode === "modules"} onClick={() => setMode("modules")}>NCG modules</button>
         <button className={mode === "schedule" ? "active" : ""} aria-pressed={mode === "schedule"} onClick={() => setMode("schedule")}>Assessment schedule</button>
       </nav>}
-      {!progress && mode === "modules" ? <NcgModuleDirectory w={w} /> : <>
+      {!progress && mode === "modules" ? <NcgModuleDirectory w={w} commit={commit} /> : <>
       <div className="wf-heading">
         <h2>
           {progress
@@ -710,7 +712,7 @@ function AssessmentForm({
       id: "", name: "", module: ncgModule?.code || "", cohortId: w.cohorts[0]?.id || "",
       subject: PROGRAMMES[programme].subject, issueDate: today(), offsets: defaultOffsets(),
       records: [], createdAt: "",
-      operations: ncgModule ? { moduleName: ncgModule.name, programme: PROGRAMMES[programme].name } : {},
+      operations: ncgModule ? { moduleName: ncgModuleEntries(w).find(m => m.code === ncgModule.code && m.programme === programme)?.name || ncgModule.name, programme: PROGRAMMES[programme].name } : {},
     };
   });
   function changeModule(value: string) {
@@ -720,7 +722,7 @@ function AssessmentForm({
     const programme = ncgModule && (!current || !ncgModule.programmes.includes(current)) ? ncgModule.programmes[0] : current;
     setDraft({ ...draft, module: code,
       subject: ncgModule && !existing?.records.length && programme ? PROGRAMMES[programme].subject : draft.subject,
-      operations: { ...draft.operations, moduleName: ncgModule?.name || "", programme: programme ? PROGRAMMES[programme].name : "" },
+      operations: { ...draft.operations, moduleName: ncgModuleEntries(w).find(m => m.code === code && m.programme === programme)?.name || ncgModule?.name || "", programme: programme ? PROGRAMMES[programme].name : "" },
     });
   }
   const [error, setError] = useState("");
@@ -808,7 +810,7 @@ function AssessmentForm({
               onChange={(e) =>
                 setDraft({ ...draft, subject: e.target.value as Subject,
                   module: findNcgModule(draft.module) && !findNcgModule(draft.module)!.programmes.some((code) => PROGRAMMES[code].subject === e.target.value) ? "" : draft.module,
-                  operations: { ...draft.operations, moduleName: findNcgModule(draft.module) && !findNcgModule(draft.module)!.programmes.some((code) => PROGRAMMES[code].subject === e.target.value) ? "" : draft.operations?.moduleName || "", programme: subjectLabel(e.target.value) },
+                  operations: { ...draft.operations, moduleName: findNcgModule(draft.module) && !findNcgModule(draft.module)!.programmes.some((code) => PROGRAMMES[code].subject === e.target.value) ? "" : ncgModuleEntries(w).find(m => m.code === draft.module && PROGRAMMES[m.programme].subject === e.target.value)?.name || draft.operations?.moduleName || "", programme: subjectLabel(e.target.value) },
                 })
               }
             >
@@ -1548,7 +1550,7 @@ function Markers({ w, commit }: { w: Workflow; commit: Commit }) {
           />
         )}
       </Panel>
-      <AssessmentList w={w} date={today()} progress />
+      <AssessmentList w={w} date={today()} progress commit={commit} />
     </>
   );
 }

@@ -91,3 +91,22 @@ export function alignPracticeModules(w: Workflow): Workflow {
   });
   return next;
 }
+
+/** One directory entry per module and programme; scheduled cohorts cannot be hidden. */
+export function ncgModuleEntries(w: Workflow) {
+  return NCG_MODULES.flatMap(m => m.programmes.map(programme => {
+    const key = m.code + ":" + programme;
+    const override = w.moduleEntries?.find(entry => entry.key === key);
+    const assessments = w.assessments.filter(a => normalizeModuleCode(a.module) === m.code && programmeForSubject(a.subject) === programme);
+    const cohortIds = [...new Set([...(override?.cohortIds || []), ...assessments.map(a => a.cohortId)])].filter(id => w.cohorts.some(c => c.id === id));
+    return { ...m, key, programme, name: override?.name || m.name, cohortIds, assessments };
+  }));
+}
+
+export function updateNcgModuleEntry(w: Workflow, key: string, name: string, cohortIds: string[]): Workflow {
+  const entry = ncgModuleEntries(w).find(m => m.key === key);
+  if (!entry) throw new Error("Module entry not found.");
+  if (!name.trim()) throw new Error("Enter a module name.");
+  if (cohortIds.some(id => !w.cohorts.some(c => c.id === id))) throw new Error("Choose an existing cohort.");
+  return { ...w, moduleEntries: [...(w.moduleEntries || []).filter(m => m.key !== key), { key, name: name.trim(), cohortIds: [...new Set(cohortIds)] }] };
+}

@@ -74,3 +74,23 @@ test('assistant distinguishes catalogue modules from scheduled assessments', () 
   assert.equal(answer.links[0].href, '/assessments/new?module=BM101');
   assert.ok(searchWorkspace(w, 'List COMP modules', '2026-10-06').answer.startsWith('18 NCG modules.'));
 });
+
+test('directory separates shared programmes and saves cohort assignments without changing schedules', () => {
+  let w = f.emptyWorkflow();
+  assert.equal(c.ncgModuleEntries(w).length, 55);
+  assert.deepEqual(c.ncgModuleEntries(w).filter(m => m.code === 'ACS100').map(m => m.programme), ['BM', 'COMP', 'HSC']);
+  const original = w;
+  w = c.updateNcgModuleEntry(w, 'ACS100:HSC', 'Updated skills', ['cohort-2', 'cohort-2']);
+  assert.equal(original.moduleEntries, undefined);
+  const row = c.ncgModuleEntries(w).find(m => m.key === 'ACS100:HSC');
+  assert.equal(row.name, 'Updated skills');
+  assert.deepEqual(row.cohortIds, ['cohort-2']);
+  assert.equal(c.ncgModuleEntries(w).find(m => m.key === 'ACS100:BM').name, 'Academic Study Skills');
+  assert.strictEqual(w.assessments, original.assessments);
+  assert.throws(() => c.updateNcgModuleEntry(w, row.key, ' ', []));
+  assert.throws(() => c.updateNcgModuleEntry(w, row.key, 'Valid', ['missing']));
+  assert.throws(() => c.updateNcgModuleEntry(w, 'missing', 'Valid', []));
+  w.assessments.push({ module: 'ACS100', subject: 'Health and Social Care', cohortId: 'cohort-1' });
+  w = c.updateNcgModuleEntry(w, row.key, 'Valid', []);
+  assert.deepEqual(c.ncgModuleEntries(w).find(m => m.key === row.key).cohortIds, ['cohort-1']);
+});

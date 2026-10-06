@@ -1,42 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { NCG_MODULES, PROGRAMMES, normalizeModuleCode, programmeForSubject, type ProgrammeCode } from "@/lib/ncg-modules";
+import { Fragment, useState } from "react";
+import { PROGRAMMES, ncgModuleEntries, updateNcgModuleEntry, type ProgrammeCode } from "@/lib/ncg-modules";
 import type { Workflow } from "@/lib/workflow";
 
-export function NcgModuleDirectory({ w }: { w: Workflow }) {
+type Commit = (change: (w: Workflow) => Workflow, message: string) => boolean;
+export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit }) {
   const [search, setSearch] = useState("");
   const [programme, setProgramme] = useState<ProgrammeCode | "">("");
-  const modules = NCG_MODULES.filter((m) => (!programme || m.programmes.includes(programme)) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase()));
+  const [cohort, setCohort] = useState("");
+  const [editing, setEditing] = useState("");
+  const [name, setName] = useState("");
+  const [cohortIds, setCohortIds] = useState<string[]>([]);
+  const entries = ncgModuleEntries(w);
+  const modules = entries.filter(m => (!programme || m.programme === programme) && (!cohort || m.cohortIds.includes(cohort)) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase()));
   return (
     <section className="wf-panel wf-module-directory">
-      <div className="wf-panel-head"><h2>NCG modules</h2><span className="wf-muted">{modules.length} modules</span></div>
+      <div className="wf-panel-head"><h2>NCG modules</h2><span className="wf-muted">{modules.length} entries</span></div>
       <div className="wf-filters">
-        <input aria-label="Search NCG modules" placeholder="Search module code or name" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select aria-label="Filter NCG programme" value={programme} onChange={(e) => setProgramme(e.target.value as ProgrammeCode | "")}>
+        <input aria-label="Search NCG modules" placeholder="Search module code or name" value={search} onChange={e => { setSearch(e.target.value); setEditing(""); }} />
+        <select aria-label="Filter NCG programme" value={programme} onChange={e => { setProgramme(e.target.value as ProgrammeCode | ""); setEditing(""); }}>
           <option value="">All programmes</option>
-          {(Object.keys(PROGRAMMES) as ProgrammeCode[]).map((code) => <option key={code} value={code}>{code} - {PROGRAMMES[code].name}</option>)}
+          {(Object.keys(PROGRAMMES) as ProgrammeCode[]).map(code => <option key={code} value={code}>{code} - {PROGRAMMES[code].name}</option>)}
+        </select>
+        <select aria-label="Filter NCG cohort" value={cohort} onChange={e => { setCohort(e.target.value); setEditing(""); }}>
+          <option value="">All cohorts</option>
+          {w.cohorts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
-      <div className="wf-table-wrap">
-        <table>
-          <thead><tr><th>Module code</th><th>Module name</th><th>Programme</th><th>Assessments</th><th /></tr></thead>
-          <tbody>
-            {modules.map((m) => {
-              const assessments = w.assessments.filter((a) => normalizeModuleCode(a.module) === m.code && (!programme || programmeForSubject(a.subject) === programme));
-              const selectedProgramme = programme || (m.programmes.length === 1 ? m.programmes[0] : "");
-              return <tr key={m.code}>
-                <td><strong>{m.code}</strong>{m.aliases?.map((alias) => <small key={alias}>Also listed as {alias}</small>)}</td><td>{m.name}</td>
-                <td>{(programme ? [programme] : m.programmes).map((code) => <small key={code}>{code} - {PROGRAMMES[code].name}</small>)}</td>
-                <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map((a) => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}<small>{w.cohorts.find((c) => c.id === a.cohortId)?.name}</small></Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
-                <td><Link className="wf-text-button" href={"/assessments/new?module=" + m.code + (selectedProgramme ? "&programme=" + selectedProgramme : "")}>Add assessment &rarr;</Link></td>
-              </tr>;
-            })}
-            {!modules.length && <tr><td colSpan={5}>No modules match this selection.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <div className="wf-table-wrap"><table>
+        <thead><tr><th>Module code</th><th>Module name</th><th>Programme</th><th>Cohort</th><th>Assessments</th><th /></tr></thead>
+        <tbody>
+          {modules.map(m => {
+            const assessments = m.assessments.filter(a => !cohort || a.cohortId === cohort);
+            const scheduledCohorts = m.assessments.map(a => a.cohortId);
+            return <Fragment key={m.key}><tr>
+              <td><strong>{m.code}</strong>{m.aliases?.map(alias => <small key={alias}>Also listed as {alias}</small>)}</td>
+              <td>{m.name}</td><td>{m.programme} - {PROGRAMMES[m.programme].name}</td>
+              <td>{m.cohortIds.length ? m.cohortIds.map(id => <small key={id}>{w.cohorts.find(c => c.id === id)?.name}</small>) : <span className="wf-muted">Not assigned</span>}</td>
+              <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map(a => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}<small>{w.cohorts.find(c => c.id === a.cohortId)?.name}</small></Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
+              <td><button className="wf-text-button" aria-label={"Edit " + m.code + " " + m.programme} aria-expanded={editing === m.key} onClick={() => { setEditing(editing === m.key ? "" : m.key); setName(m.name); setCohortIds(m.cohortIds); }}>Edit</button></td>
+            </tr>{editing === m.key && <tr><td colSpan={6}>
+              <form className="wf-module-editor" onSubmit={e => { e.preventDefault(); if (commit(next => updateNcgModuleEntry(next, m.key, name, cohortIds), "Updated " + m.code + " (" + m.programme + ")")) setEditing(""); }}>
+                <label>Module name<input aria-label="Edit module name" required value={name} onChange={e => setName(e.target.value)} /></label>
+                <fieldset><legend>Cohorts</legend>{w.cohorts.map(c => <label key={c.id}><input type="checkbox" checked={cohortIds.includes(c.id)} disabled={scheduledCohorts.includes(c.id)} onChange={e => setCohortIds(e.target.checked ? [...cohortIds, c.id] : cohortIds.filter(id => id !== c.id))} />{c.name}</label>)}</fieldset>
+                {scheduledCohorts.length > 0 && <small className="wf-muted">Cohorts with scheduled assessments stay assigned.</small>}
+                <div className="wf-module-editor-actions"><button className="wf-button primary" type="submit">Save changes</button><button className="wf-button" type="button" onClick={() => setEditing("")}>Cancel</button></div>
+              </form>
+            </td></tr>}</Fragment>;
+          })}
+          {!modules.length && <tr><td colSpan={6}>No modules match this selection.</td></tr>}
+        </tbody>
+      </table></div>
     </section>
   );
 }
