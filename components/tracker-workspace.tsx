@@ -413,27 +413,19 @@ export function CohortDirectory({
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
+  const enrolmentRows = list.flatMap(student => student.enrolments.filter(e => (!cid || e.cohortId === cid) && (!subject || e.subject === subject)).map(enrolment => ({ student, enrolment })));
   const student = w.students.find((s) => s.id === selected);
   async function exportCohort() {
     const roster = [
       [
         ...STUDENT_COLUMNS.map(([, label]) => label),
         "Cohort",
-        "Subjects",
+        "Programme",
       ],
-      ...list.map((s) =>
-        studentCells(s).concat([
-          s.enrolments
-            .filter((e) => (!cid || e.cohortId === cid) && (!subject || e.subject === subject))
-            .map((e) => w.cohorts.find((c) => c.id === e.cohortId)?.name)
-            .filter((v, i, a) => a.indexOf(v) === i)
-            .join("; "),
-          s.enrolments
-            .filter((e) => (!cid || e.cohortId === cid) && (!subject || e.subject === subject))
-            .map((e) => e.subject)
-            .join("; "),
-        ]),
-      ),
+      ...enrolmentRows.map(({ student, enrolment }) => studentCells(student).concat([
+        w.cohorts.find(c => c.id === enrolment.cohortId)?.name || "",
+        subjectLabel(enrolment.subject),
+      ])),
     ];
     await saveExcel("Students", [{ name: "Students", rows: roster }]);
   }
@@ -478,24 +470,22 @@ export function CohortDirectory({
           </button>
         </div>
         <p className="wf-muted">
-          {list.length} students · downloads include student details, the
-          assessment schedule, learning checkpoints, and separate
-          marking/resubmission attempts.
+          {list.length} students · {enrolmentRows.length} enrolments
         </p>
         <div className="wf-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Student ID</th><th>Name</th><th>Cohort / subject</th><th>Campus</th>
+                <th>Student ID</th><th>Name</th><th>Cohort</th><th>Programme</th><th>Campus</th>
                 <th>Profile</th>
               </tr>
             </thead>
             <tbody>
-              {!list.length && <tr><td colSpan={5}>No students in this selection. Add a student or import a workbook.</td></tr>}
-              {list.map((s) => (
-                <tr key={s.id}>
+              {!enrolmentRows.length && <tr><td colSpan={6}>No students in this selection. Add a student or import a workbook.</td></tr>}
+              {enrolmentRows.map(({ student: s, enrolment }) => (
+                <tr key={s.id + ":" + enrolment.cohortId + ":" + enrolment.subject}>
                   <td>{s.ncgId}</td><td>{s.firstName} {s.lastName}</td>
-                  <td>{s.enrolments.filter((e) => (!cid || e.cohortId === cid) && (!subject || e.subject === subject)).map((e) => <small key={e.cohortId + e.subject}>{w.cohorts.find((c) => c.id === e.cohortId)?.name} · {e.subject}</small>)}</td>
+                  <td>{w.cohorts.find(c => c.id === enrolment.cohortId)?.name}</td><td>{subjectLabel(enrolment.subject)}</td>
                   <td>{s.profile?.campus || "—"}</td>
                   <td>
                     <button
@@ -656,6 +646,7 @@ export function LearningTracker({
               other.module === a?.module,
           )),
     );
+  const assessmentRows = students.flatMap(student => w.assessments.filter(other => other.module === a?.module && other.cohortId === a?.cohortId && other.subject === a?.subject).map(assessment => ({ student, assessment })));
   const selected = students.find((s) => s.id === studentId);
   return (
     <>
@@ -684,29 +675,31 @@ export function LearningTracker({
             <thead>
               <tr>
                 <th>Student</th>
-                <th>Week 4</th><th>Week 8</th><th>Submission / marking</th>
+                <th>Assessment</th><th>Week 4</th><th>Week 8</th><th>Submission / marking</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {!students.length && <tr><td colSpan={5}>{a ? "No enrolled students in this module." : "Add an assessment to create a module tracker."}</td></tr>}
-              {students.map((s) => (
-                <tr key={s.id}>
+              {!assessmentRows.length && <tr><td colSpan={6}>{a ? "No enrolled students in this module." : "Add an assessment to create a module tracker."}</td></tr>}
+              {assessmentRows.map(({ student: s, assessment: other }) => (
+                <tr key={s.id + ":" + other.id}>
                   <td>
                     <strong>
                       {s.firstName} {s.lastName}
                     </strong>
                     <small>{s.ncgId}</small>
                   </td>
+                  <td><Link href={"/workflow/" + other.id}>{other.name}</Link></td>
                   <td>{records(s)?.values.progress1 || "—"}<small>{records(s)?.values.task1}</small></td>
                   <td>{records(s)?.values.progress2 || "—"}<small>{records(s)?.values.task2}</small></td>
-                  <td>{w.assessments.filter((other) => other.module === a?.module && other.cohortId === a?.cohortId && other.subject === a?.subject).map((other) => {
-                    const r = other.records.find((r) => r.studentId === s.id);
-                    return <Link className="wf-record-line" key={other.id} href={"/workflow/" + other.id}>
-                      {other.name}: {r?.submission === "submitted" ? "Submitted" : r?.submission === "resubmission" ? "Resubmission" : "Awaiting submission"}
-                      <small>{w.markers.find((m) => m.id === r?.markerId)?.name || "Unallocated"} · {r && r.grade !== "" ? "Grade " + r.grade : "Awaiting marking"}</small>
+                  <td>{(() => {
+                    const r = other.records.find(r => r.studentId === s.id);
+                    return <Link className="wf-record-line" href={"/workflow/" + other.id}>
+                      {r?.submission === "submitted" ? "Submitted" : r?.submission === "resubmission" ? "Resubmission" : "Awaiting submission"}
+                      <small>{w.markers.find(m => m.id === r?.markerId)?.name || "Unallocated"}</small>
+                      <small>{r && r.grade !== "" ? "Grade " + r.grade : "Awaiting marking"}</small>
                     </Link>;
-                  })}</td>
+                  })()}</td>
                   <td>
                     <button
                       className="wf-text-button"
@@ -915,15 +908,15 @@ export function MarkingTracker({ w }: { w: Workflow; commit: Commit }) {
       <select aria-label="Marking subject" value={subject} onChange={(e) => setSubject(e.target.value)}><option value="">All subjects</option>{SUBJECTS.map((s) => <option key={s} value={s}>{subjectLabel(s)}</option>)}</select>
       <Link className="wf-button" href="/progress">Progress tracker →</Link>
     </div>
-    <div className="wf-table-wrap"><table><thead><tr><th>Marker</th><th>Course / module</th><th>Allocated</th><th>Marked</th></tr></thead><tbody>
+    <div className="wf-table-wrap"><table><thead><tr><th>Marker</th><th>Module</th><th>Programme</th><th>Cohort</th><th>Allocated</th><th>Marked</th></tr></thead><tbody>
       {groups.flatMap((a) => {
         const records = assessments.filter((b) => b.module === a.module && b.cohortId === a.cohortId && b.subject === a.subject).flatMap((b) => b.records);
         return Array.from(new Set(records.map((r) => r.markerId))).map((id) => {
           const assigned = records.filter((r) => r.markerId === id);
-          return <tr key={a.id + id}><td>{w.markers.find((m) => m.id === id)?.name || "Unallocated"}</td><td><Link href={"/workflow/" + a.id}>{subjectLabel(a.subject)} · {a.module}</Link><small>{w.cohorts.find((c) => c.id === a.cohortId)?.name}</small></td><td>{assigned.length}</td><td>{assigned.filter((r) => r.grade !== "").length}</td></tr>;
+          return <tr key={a.id + id}><td>{w.markers.find((m) => m.id === id)?.name || "Unallocated"}</td><td><Link href={"/workflow/" + a.id}>{a.module}</Link></td><td>{subjectLabel(a.subject)}</td><td>{w.cohorts.find(c => c.id === a.cohortId)?.name}</td><td>{assigned.length}</td><td>{assigned.filter((r) => r.grade !== "").length}</td></tr>;
         });
       })}
-      {!assessments.some((a) => a.records.length) && <tr><td colSpan={4}>No allocations in this selection.</td></tr>}
+      {!assessments.some((a) => a.records.length) && <tr><td colSpan={6}>No allocations in this selection.</td></tr>}
     </tbody></table></div>
   </Box>;
 }
