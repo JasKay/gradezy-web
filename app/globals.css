@@ -1044,3 +1044,22 @@ body {
   }
 }
 .wf-operations-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.wf-operations-grid>div{border:1px solid #e4ebe7;border-radius:8px;background:#f7faf8;padding:14px}.wf-operations-grid span{display:block;font-size:10px;color:#85998d;margin-bottom:6px}.wf-operations-grid strong{font-size:12px;font-weight:600;color:#4a715b}.wf-source-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:24px}.wf-source-cards>div{background:#fff;border:1px solid #dfe8e2;border-radius:12px;padding:25px}.wf-source-cards h3{font-size:17px;font-weight:600;margin-bottom:12px}.wf-source-cards p{font-size:12px;color:#809489;line-height:1.8;margin-top:15px}@media(max-width:700px){.wf-operations-grid,.wf-source-cards{grid-template-columns:1fr}.wf-form-grid.three{grid-template-columns:1fr}}
+
+.wf-disclosure { margin: 16px 0; border: 1px solid #dfe7e4; border-radius: 10px; background: white; }
+.wf-disclosure > summary { cursor: pointer; padding: 14px 18px; color: #225c4b; font-size: 13px; font-weight: 600; }
+.wf-disclosure > .wf-panel { border: 0; margin-bottom: 0; }
+.wf-view-assessments .wf-assessment-list { gap: 12px; }
+.wf-view-assessments .wf-assessment-title { padding: 14px 18px; }
+.wf-view-assessments .wf-assessment-title h3 { font-size: 15px; margin: 4px 0; }
+.wf-view-assessments .wf-milestones { padding: 12px 18px; gap: 12px; }
+.wf-view-assessments .wf-card-footer { padding: 8px 18px; }
+.wf-view-assessments .wf-heading { display: none; }
+.wf-assistant-inline { margin-bottom: 20px; }
+.wf-assistant-inline .wf-form { gap: 12px; padding: 16px 20px; }
+.wf-assistant-settings summary { cursor: pointer; font-size: 12px; color: #668273; }
+.wf-assistant-settings .wf-field { margin-top: 10px; }
+.wf-record-line { display: block; margin-bottom: 6px; }
+.wf-integration-list > div { padding: 18px 0; border-bottom: 1px solid #edf0ee; }
+.wf-integration-list span { float: right; font-size: 12px; color: #668273; }
+.wf-integration-list p { margin-top: 6px; font-size: 13px; color: #819086; }
+@media (max-width: 700px) { .wf-view-assessments .wf-milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

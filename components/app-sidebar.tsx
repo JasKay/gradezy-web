@@ -8,9 +8,7 @@ const routes = [
   { href: "/progress", label: "Progress Tracker", icon: "◷" },
   { href: "/markers", label: "Marker directory", icon: "♧" },
   { href: "/marking", label: "Marking Allocation", icon: "▤" },
-  { href: "/sources", label: "Data sources", icon: "◇" },
-  { href: "/uploads", label: "Upload preparation", icon: "↥" },
-  { href: "/assistant", label: "AI assistant", icon: "✦" },
+  { href: "/sources", label: "Integrations", icon: "◇" },
 ];
 export function AppSidebar({
   assessment,

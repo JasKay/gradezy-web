@@ -61,10 +61,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
   page.on("pageerror", (e) => errors.push(e.message));
   console.log("Navigating workflow page");
   await page.goto(`${base}/dashboard`);
-  await page.getByRole("heading", { name: "Every assessment." }).waitFor();
+  await page.getByRole("heading", { name: "Ask Gradezy" }).waitFor();
   console.log("Dashboard ready");
   await page.goto(`${base}/students`);
-  await page.getByRole("heading", { name: "Start with the people" }).waitFor();
+  await page.getByRole("heading", { name: "Students", exact: true }).waitFor();
+  await page.getByText("Add student", { exact: true }).click();
   await page.getByLabel("Student / NCG ID", { exact: true }).fill("SMOKE001");
   await page.getByLabel("First name", { exact: true }).fill("Smoke");
   await page.getByLabel("Last name", { exact: true }).fill("Student");
@@ -185,6 +186,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
   await page.reload();
   await page.getByText("Stale · prepare again", { exact: true }).waitFor();
   await page.goto(`${base}/assistant`);
+  await page.getByText("Assistant access", { exact: true }).click();
   await page
     .getByLabel("Assistant access token", { exact: true })
     .fill("not-configured");
@@ -196,7 +198,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     .filter({ hasText: "AI assistant is not configured" })
     .waitFor();
   await page.goto(`${base}/dashboard`);
-  await page.getByRole("heading", { name: "Every assessment." }).waitFor();
+  await page.getByRole("heading", { name: "Ask Gradezy" }).waitFor();
   if (process.env.SCREENSHOT_DIR) {
     fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
     await page.screenshot({

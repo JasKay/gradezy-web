@@ -19,7 +19,8 @@ import {
   SpreadsheetImport,
   SourceRegister,
 } from "@/components/tracker-workspace";
-import { populateSamples } from "@/lib/tracker-sheets";
+
+import { removeSamples } from "@/lib/tracker-sheets";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -67,7 +68,7 @@ export type WorkspaceView =
   | "sources";
 type Commit = (change: (w: Workflow) => Workflow, message: string) => boolean;
 const titles: Record<WorkspaceView, string> = {
-  overview: "Assessment operations",
+  overview: "Overview",
   assessments: "Assessment tracker",
   enrolments: "Cohorts & enrolments",
   markers: "Marker allocation",
@@ -77,7 +78,7 @@ const titles: Record<WorkspaceView, string> = {
   detail: "Assessment workspace",
   progress: "Progress Tracker",
   marking: "Marking Allocation",
-  sources: "Data sources",
+  sources: "Integrations",
 };
 const links = [
   { label: "Overview", href: "/dashboard" },
@@ -86,9 +87,7 @@ const links = [
   { label: "Progress", href: "/progress" },
   { label: "Markers", href: "/markers" },
   { label: "Marking", href: "/marking" },
-  { label: "Sources", href: "/sources" },
-  { label: "Uploads", href: "/uploads" },
-  { label: "Assistant", href: "/assistant" },
+  { label: "Integrations", href: "/sources" },
 ];
 function formatDate(value: string) {
   if (!value) return "Not set";
@@ -204,13 +203,7 @@ export function WorkflowWorkspace({
   useEffect(() => {
     const load = () => {
       try {
-        let loaded = readWorkflow(localStorage);
-        if (
-          !localStorage.getItem(WORKFLOW_KEY) &&
-          !loaded.students.length &&
-          !loaded.assessments.length
-        )
-          loaded = saveWorkflow(populateSamples(loaded), localStorage);
+        const loaded = removeSamples(readWorkflow(localStorage));
         setW(loaded);
         setDate(today());
         setError("");
@@ -249,7 +242,7 @@ export function WorkflowWorkspace({
   };
   const selected = w?.assessments.find((a) => a.id === assessmentId);
   return (
-    <main className="wf-shell lg:pl-64">
+    <main className={`wf-shell wf-view-${view} lg:pl-64`}>
       <AppSidebar />
       <header className="wf-topbar">
         <div>
@@ -321,15 +314,6 @@ export function WorkflowWorkspace({
           />
         ) : (
           <>
-            {w.students.some((s) => s.sample) && (
-              <div className="wf-message info">
-                Sample data is loaded. Dummy student IDs begin DEMO; real
-                imports remain separately identified.{" "}
-                <Link href="/students">
-                  View or download the cohort workbooks
-                </Link>
-              </div>
-            )}
             {view === "overview" && <Overview w={w} date={date} />}
             {view === "assessments" && (
               <AssessmentList w={w} date={date} progress={false} />
@@ -342,7 +326,7 @@ export function WorkflowWorkspace({
             )}
             {view === "progress" && <LearningTracker w={w} commit={commit} />}
             {view === "marking" && <MarkingTracker w={w} commit={commit} />}
-            {view === "sources" && <SourceRegister w={w} commit={commit} />}
+            {view === "sources" && <SourceRegister />}
             {view === "markers" && <Markers w={w} commit={commit} />}
             {view === "assessments" && (
               <SpreadsheetImport
@@ -389,28 +373,7 @@ function Overview({ w, date }: { w: Workflow; date: string }) {
   ).length;
   return (
     <>
-      <div className="wf-intro">
-        <div>
-          <span className="wf-eyebrow">ONE CONNECTED WORKFLOW</span>
-          <h2>
-            Every assessment.
-            <br />
-            <span>One clear picture.</span>
-          </h2>
-          <p>
-            From cohort enrolment to reviewed grades. See what is moving, what
-            is late, and what needs your team.
-          </p>
-        </div>
-        <Link className="wf-assistant-card" href="/assistant">
-          <span className="wf-spark">✦</span>
-          <div>
-            <h3>Make sense of the workload</h3>
-            <p>Ask about blockers, deadlines and next actions.</p>
-            <span>Open assessment assistant →</span>
-          </div>
-        </Link>
-      </div>
+      <Assistant w={w} date={date} compact />
       <div className="wf-stats">
         {[
           {
@@ -437,7 +400,7 @@ function Overview({ w, date }: { w: Workflow; date: string }) {
             label: "Awaiting grade review",
             value: review,
             detail: `${ready.length} assessments ready for preparation`,
-            href: "/uploads",
+            href: "/assessments",
             tone: "green",
           },
         ].map((s) => (
@@ -450,21 +413,6 @@ function Overview({ w, date }: { w: Workflow; date: string }) {
             <strong>{s.value}</strong>
             <small>{s.detail}</small>
           </Link>
-        ))}
-      </div>
-      <div className="wf-flow">
-        {[
-          "Enrol",
-          "Schedule",
-          "Allocate & mark",
-          "Review",
-          "Prepare upload",
-        ].map((s, i) => (
-          <div key={s}>
-            <span>0{i + 1}</span>
-            <strong>{s}</strong>
-            {i < 4 && <i>→</i>}
-          </div>
         ))}
       </div>
       <div className="wf-two-columns">
@@ -1036,12 +984,10 @@ function AssessmentDetail({
           <p>
             {reasons.length
               ? reasons.join(" ")
-              : "Prepare a snapshot of these reviewed grades in the uploads workspace."}
+              : "All grades are reviewed."}
           </p>
         </div>
-        <Link href="/uploads" className="wf-button">
-          Upload preparation →
-        </Link>
+
       </div>
       <AssessmentOperations a={a} commit={commit} />
       <Link className="wf-button" href="/marking">
@@ -1398,9 +1344,6 @@ function RecordEditor({
   );
 }
 function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
-  const [cohortId, setCohort] = useState(w.cohorts[0]?.id || "");
-  const [subject, setSubject] = useState<Subject | "">("");
-  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     ncgId: "",
     firstName: "",
@@ -1408,65 +1351,10 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
     subject: SUBJECTS[0] as Subject,
     cohort: w.cohorts[0]?.name || "",
   });
-  const list = w.students.filter(
-    (s) =>
-      `${s.firstName} ${s.lastName} ${s.ncgId}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
-      ((!cohortId && !subject) ||
-        s.enrolments.some(
-          (e) =>
-            (!cohortId || e.cohortId === cohortId) &&
-            (!subject || e.subject === subject),
-        )),
-  );
   return (
-    <>
-      <div className="wf-heading">
-        <h2>Start with the people</h2>
-        <p>
-          Students can have several subject enrolments. These enrolments build
-          the assessment rosters.
-        </p>
-      </div>
-      <div className="wf-cohort-grid">
-        {w.cohorts.map((c) => (
-          <div
-            key={c.id}
-            className={`wf-cohort-card ${cohortId === c.id ? "selected" : ""}`}
-          >
-            <button onClick={() => setCohort(cohortId === c.id ? "" : c.id)}>
-              <span className="wf-eyebrow">COHORT</span>
-              <h3>{c.name}</h3>
-              <strong>
-                {
-                  w.students.filter((s) =>
-                    s.enrolments.some((e) => e.cohortId === c.id),
-                  ).length
-                }
-                <small>students</small>
-              </strong>
-            </button>
-            <Field label="Start month">
-              <input
-                type="month"
-                defaultValue={c.startMonth}
-                onBlur={(e) => {
-                  if (e.target.value !== c.startMonth)
-                    commit((next) => {
-                      next.cohorts.find((old) => old.id === c.id)!.startMonth =
-                        e.target.value;
-                      return next;
-                    }, `Updated start month for ${c.name}.`);
-                }}
-              />
-            </Field>
-          </div>
-        ))}
-      </div>
+    <details className="wf-disclosure"><summary>Add student</summary>
       <Panel
-        title="Add a student subject enrolment"
-        subtitle="Use the same student ID to enrol an existing student in another subject."
+        title="Student details"
       >
         <form
           className="wf-form"
@@ -1531,99 +1419,7 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
           <button className="wf-button primary">Add enrolment</button>
         </form>
       </Panel>
-      <FileImport
-        title="Import student enrolments"
-        kind="enrolments"
-        w={w}
-        commit={commit}
-      />
-      <Panel
-        title="Enrolled students"
-        subtitle={`${w.students.length} student identities · ${w.students.reduce((sum, s) => sum + s.enrolments.length, 0)} subject enrolments`}
-      >
-        <div className="wf-filters">
-          <input
-            placeholder="Search students…"
-            aria-label="Search enrolled students"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            value={cohortId}
-            onChange={(e) => setCohort(e.target.value)}
-            aria-label="Student cohort filter"
-          >
-            <option value="">All cohorts / unassigned students</option>
-            {w.cohorts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={subject}
-            onChange={(e) => setSubject(e.target.value as Subject)}
-            aria-label="Student subject filter"
-          >
-            <option value="">All subjects</option>
-            {SUBJECTS.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-        {!list.length ? (
-          <Empty
-            title="No students in this selection"
-            text="Add enrolments above, or select all cohorts to see migrated students without enrolments."
-          />
-        ) : (
-          <div className="wf-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>ID</th>
-                  <th>Subject enrolments</th>
-                  <th>Assessment records</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <strong>
-                        {s.firstName} {s.lastName}
-                      </strong>
-                    </td>
-                    <td>{s.ncgId}</td>
-                    <td>
-                      {s.enrolments.length ? (
-                        s.enrolments.map((e) => (
-                          <small key={`${e.cohortId}-${e.subject}`}>
-                            {e.subject} ·{" "}
-                            {w.cohorts.find((c) => c.id === e.cohortId)?.name}
-                          </small>
-                        ))
-                      ) : (
-                        <Badge tone="amber">Enrolment to confirm</Badge>
-                      )}
-                    </td>
-                    <td>
-                      {w.assessments.reduce(
-                        (n, a) =>
-                          n +
-                          a.records.filter((r) => r.studentId === s.id).length,
-                        0,
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </>
+    </details>
   );
 }
 function Markers({ w, commit }: { w: Workflow; commit: Commit }) {
@@ -2110,7 +1906,7 @@ function Uploads({ w, commit }: { w: Workflow; commit: Commit }) {
     </>
   );
 }
-function Assistant({ w, date }: { w: Workflow; date: string }) {
+function Assistant({ w, date, compact = false }: { w: Workflow; date: string; compact?: boolean }) {
   const [question, setQuestion] = useState(
     "What is blocking assessment completion, and what should we do next?",
   );
@@ -2124,6 +1920,22 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
     setBusy(true);
     setError("");
     setAnswer("");
+    if (!token.trim()) {
+      const workload = /balance|workload|marker/i.test(question);
+      const priority = context.assessments.map((a, i) => ({ a, assessment: w.assessments[i] }))
+        .filter(({ a }) => a.status === "Overdue" || a.blockers.length)
+        .sort((x, y) => Number(y.a.status === "Overdue") - Number(x.a.status === "Overdue"))
+        .slice(0, 3);
+      const lines = workload
+        ? context.markerWorkload.filter((m) => m.awaitingMarking > 0).sort((a, b) => b.awaitingMarking - a.awaitingMarking).slice(0, 3).map((m) => {
+            const index = context.markerWorkload.indexOf(m);
+            return w.markers[index].name + ": " + m.awaitingMarking + " awaiting marking of " + m.assigned + " allocated.";
+          })
+        : priority.map(({ a, assessment }) => assessment.module + " / " + assessment.name + ": " + a.status + ". " + (a.blockers.slice(0, 2).join(" ") || "Check outstanding deadlines in the assessment workspace."));
+      setAnswer("Live workspace checks\n" + (lines.length ? lines.join("\n") : "No outstanding issues found in the current records.") + "\nFor a tailored AI answer, configure Assistant access.");
+      setBusy(false);
+      return;
+    }
     try {
       const res = await fetch("/api/assessment-assistant", {
         method: "POST",
@@ -2146,18 +1958,9 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
   }
   return (
     <>
-      <div className="wf-heading">
-        <span className="wf-eyebrow">✦ ASSESSMENT ASSISTANT</span>
-        <h2>A clearer view of what needs doing</h2>
-        <p>
-          Ask for an explanation, a plan, or a follow-up draft based on your
-          current workflow.
-        </p>
-      </div>
-      <div className="wf-two-columns">
+      <div className={compact ? "wf-assistant-inline" : "wf-two-columns"}>
         <Panel
-          title="Ask about your assessments"
-          subtitle="The assistant receives aggregate progress and anonymous assessment / marker references."
+          title="Ask Gradezy"
         >
           <form className="wf-form" onSubmit={ask}>
             <div className="wf-prompt-chips">
@@ -2182,24 +1985,25 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
                 maxLength={2000}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                rows={4}
+                rows={compact ? 2 : 4}
               />
             </Field>
+            <details className="wf-assistant-settings"><summary>Assistant access</summary>
             <Field label="Assistant access token">
               <input
                 type="password"
-                required
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 autoComplete="off"
                 placeholder="Provided by your workspace administrator"
               />
             </Field>
-            <p className="wf-muted">
+            </details>
+            {!compact && <p className="wf-muted">
               Student names, IDs, individual grades and notes are excluded from
               the workflow context. Avoid adding them to your question.
               Suggestions do not change records.
-            </p>
+            </p>}
             <button className="wf-button primary" disabled={busy}>
               {busy ? "Reading the workflow…" : "Ask assistant ✦"}
             </button>
@@ -2210,7 +2014,7 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
             )}
             {answer && (
               <div className="wf-answer" aria-live="polite">
-                <Badge tone="green">AI-generated suggestion</Badge>
+                <Badge tone="green">{answer.startsWith("Live workspace checks") ? "Live workspace checks" : "AI-generated suggestion"}</Badge>
                 <p>{answer}</p>
                 <button
                   type="button"
@@ -2225,12 +2029,12 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
             )}
           </form>
         </Panel>
-        <Panel
+        {!compact && <Panel
           title="Live workflow checks"
           subtitle="Calculated from records; available without an AI connection."
         >
           {context.assessments.length ? (
-            context.assessments.map((a, i) => (
+            context.assessments.map((a, i) => ({ a, i })).filter(({ a }) => a.status === "Overdue" || a.blockers.length).sort((x, y) => Number(y.a.status === "Overdue") - Number(x.a.status === "Overdue")).slice(0, 5).map(({ a, i }) => (
               <Link
                 className="wf-check-item"
                 key={a.reference}
@@ -2260,7 +2064,7 @@ function Assistant({ w, date }: { w: Workflow; date: string }) {
             confirm · {context.gaps.studentsWithoutEnrolment} student enrolments
             to confirm
           </div>
-        </Panel>
+        </Panel>}
       </div>
     </>
   );

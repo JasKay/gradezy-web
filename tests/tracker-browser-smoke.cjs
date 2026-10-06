@@ -1,16 +1,74 @@
-﻿const assert = require('node:assert/strict');
-const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-(async()=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
- try {
- const context=await browser.newContext({acceptDownloads:true});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const base=process.env.TEST_BASE_URL||'http://127.0.0.1:3001';await page.goto(base+'/students');await page.getByRole('button',{name:'Download cohort workbook',exact:true}).waitFor();
- const saved=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('gradezy_workflow_v1')));
- let w=await saved();assert.equal(w.students.length,54);assert.equal(w.assessments.length,18);assert.equal(w.cohorts[5].startMonth,'2026-02');
- await page.getByRole('button',{name:'View student',exact:false}).first().click();await page.getByRole('button',{name:'Save student details',exact:true}).waitFor();await page.getByRole('button',{name:'Close student',exact:true}).click();
- const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download cohort workbook',exact:true}).click();const file=await pending;const X=require('xlsx');const book=X.readFile(await file.path());assert.equal(book.SheetNames.length,4);const mark=X.utils.sheet_to_json(book.Sheets[book.SheetNames[3]],{header:1});assert.equal(mark[0].filter(h=>h==='Final Grade').length,2);
- await page.goto(base+'/progress');await page.getByRole('button',{name:'Update checkpoints',exact:false}).first().click();await page.getByLabel('Progress 1 -W4',{exact:true}).fill('Browser check');await page.getByRole('button',{name:'Save learning progress',exact:true}).click();w=await saved();assert.equal(w.learningProgress[0].values.progress1,'Browser check');
- await page.goto(base+'/marking');await page.getByRole('heading',{name:'Marking Allocation',exact:true}).first().waitFor();
- await page.goto(base+'/sources');await page.getByRole('heading',{name:'Data sources',exact:true}).first().waitFor();assert.deepEqual(errors,[]);console.log('Tracker browser checks passed: sample cohorts, student profiles, four-sheet download, duplicate grade headers, independent learning updates, marking and sources.');
- } finally {await browser.close();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+const assert = require('node:assert/strict');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const X = require('xlsx');
+const fs = require('node:fs');
+(async () => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
+  try {
+    const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3001';
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('gradezy_workflow_v1')));
+    const workbook = rows => {
+      const book = X.utils.book_new();
+      X.utils.book_append_sheet(book, X.utils.aoa_to_sheet(rows), 'Tracker');
+      return X.write(book, { type: 'buffer', bookType: 'xlsx' });
+    };
+    const upload = async (summary, rows) => {
+      await page.getByText(summary, { exact: true }).click();
+      await page.getByLabel('Upload tracker workbook').setInputFiles({ name: 'tracker.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: workbook(rows) });
+      await page.getByRole('button', { name: 'Confirm tracker import', exact: true }).click();
+    };
+    await page.goto(base + '/students');
+    await page.getByRole('heading', { name: 'Students', exact: true }).waitFor();
+    assert.equal(await page.getByText(/Dummy|Sample workspace|Start with the people|Enrolled students/).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Upload preparation', exact: true }).count(), 0);
+    await upload('Import students from Excel', [['NCG ID', 'First Name', 'Last Name', 'Cohort', 'Program Name'], ['001', 'Alex', 'Taylor', 'Cohort 1', 'Business'], ['002', 'Sam', 'Lee', 'Cohort 2', 'Computing']]);
+    let w = await saved();
+    assert.equal(w.students.length, 2);
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download list', exact: true }).click();
+    const file = await pending;
+    const book = X.readFile(await file.path());
+    assert.deepEqual(book.SheetNames, ['Students']);
+    const rows = X.utils.sheet_to_json(book.Sheets.Students, { header: 1 });
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1][0], '001');
+    await page.getByLabel('Directory cohort').selectOption('');
+    await page.getByLabel('Directory subject').selectOption('Computer Science');
+    await page.getByRole('cell', { name: '002', exact: true }).waitFor();
+    assert.equal(await page.getByRole('cell', { name: '001', exact: true }).count(), 0);
+    await page.goto(base + '/assessments');
+    await upload('Import assessment tracker from Excel', [['Cohort', 'Module Code', 'Assessment', 'Programme'], ['Cohort 1', 'BUS101', 'Report', 'Business']]);
+    await page.getByRole('heading', { name: 'Report', exact: true }).waitFor();
+    await page.goto(base + '/progress');
+    await page.getByRole('button', { name: 'Update checkpoints', exact: false }).first().click();
+    await page.getByLabel('Progress 1 -W4', { exact: true }).fill('On track');
+    await page.getByRole('button', { name: 'Save learning progress', exact: true }).click();
+    await upload('Import progress tracker from Excel', [['NCG ID', 'First Name', 'Last Name', 'Progress 2-W8'], ['001', 'Alex', 'Taylor', 'Complete']]);
+    // The same import control supports the marking workbook for this module.
+    await page.getByLabel('Tracker type').selectOption('marking');
+    await page.getByLabel('Upload tracker workbook').setInputFiles({ name: 'marking.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: workbook([['NCG ID', 'First Name', 'Last Name', '1st Marker', 'Grade (out of 100%)'], ['001', 'Alex', 'Taylor', 'Jordan Smith', '0']]) });
+    await page.getByRole('button', { name: 'Confirm tracker import', exact: true }).click();
+    await page.locator('a.wf-button[href^="/marking?"]').click();
+    await page.getByRole('cell', { name: 'Jordan Smith', exact: true }).waitFor();
+    const markerRow = page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Jordan Smith', exact: true }) });
+    assert.deepEqual(await markerRow.locator('td').allTextContents(), ['Jordan Smith', 'Business Management \u00b7 BUS101Cohort 1', '1', '1']);
+    assert.equal(await page.getByLabel('Marking module').inputValue(), 'BUS101');
+    await page.goto(base + '/dashboard');
+    await page.getByRole('heading', { name: 'Ask Gradezy', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Ask assistant', exact: false }).click();
+    await page.getByText('Live workspace checks', { exact: true }).waitFor();
+    await page.goto(base + '/sources');
+    await page.getByRole('heading', { name: 'Integrations', exact: true }).first().waitFor();
+    assert.equal(await page.getByText('Planned', { exact: true }).count(), 3);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(base + '/progress');
+    await page.getByRole('heading', { name: 'Progress Tracker', exact: true }).first().waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    assert.deepEqual(errors, []);
+    console.log('Tracker browser checks passed: Excel imports, filtered download, checkpoints, zero-grade marking count, module link, Overview assistant, integrations and mobile layout.');
+  } finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });
