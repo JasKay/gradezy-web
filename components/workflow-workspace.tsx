@@ -23,6 +23,7 @@ import {
 import { removeSamples } from "@/lib/tracker-sheets";
 import { populatePracticeData } from "@/lib/practice-workspace";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
+import { NcgAssessmentSchedule } from "@/components/ncg-assessment-schedule";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
 import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, ncgModuleEntries, alignPracticeModules } from "@/lib/ncg-modules";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -564,7 +565,7 @@ function AssessmentList({
         <button className={mode === "modules" ? "active" : ""} aria-pressed={mode === "modules"} onClick={() => setMode("modules")}>NCG modules</button>
         <button className={mode === "schedule" ? "active" : ""} aria-pressed={mode === "schedule"} onClick={() => setMode("schedule")}>Assessment schedule</button>
       </nav>}
-      {!progress && mode === "modules" ? <NcgModuleDirectory w={w} commit={commit} /> : <>
+      {!progress && mode === "modules" ? <NcgModuleDirectory w={w} commit={commit} /> : !progress ? <NcgAssessmentSchedule w={w} date={date} /> : <>
       <div className="wf-heading">
         <h2>
           {progress

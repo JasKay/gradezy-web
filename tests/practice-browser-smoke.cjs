@@ -76,7 +76,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(w.learningProgress.length, 36);
     await page.goto(base + '/assessments');
     await page.getByRole('button', { name: 'Assessment schedule', exact: true }).click();
-    await page.getByRole('heading', { name: 'Strategy report', exact: true }).first().waitFor();
+    await page.getByRole('link', { name: 'Strategy report', exact: true }).first().waitFor();
     await page.goto(base + '/marking');
     await page.getByRole('cell', { name: 'Rachel Adams', exact: true }).first().waitFor();
     await page.goto(base + '/progress');

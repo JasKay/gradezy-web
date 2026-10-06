@@ -37,7 +37,7 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
             const scheduledCohorts = m.assessments.map(a => a.cohortId);
             return <Fragment key={m.key}><tr>
               <td><strong>{m.code}</strong>{m.aliases?.map(alias => <small key={alias}>Also listed as {alias}</small>)}</td>
-              <td>{m.name}</td><td>{m.programme} - {PROGRAMMES[m.programme].name}</td>
+              <td>{m.name}</td><td><strong>{m.programme}</strong><small>{PROGRAMMES[m.programme].name}</small></td>
               <td>{m.cohortIds.length ? m.cohortIds.map(id => <small key={id}>{w.cohorts.find(c => c.id === id)?.name}</small>) : <span className="wf-muted">Not assigned</span>}</td>
               <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map(a => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}<small>{w.cohorts.find(c => c.id === a.cohortId)?.name}</small></Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
               <td><button className="wf-text-button" aria-label={"Edit " + m.code + " " + m.programme} aria-expanded={editing === m.key} onClick={() => { setEditing(editing === m.key ? "" : m.key); setName(m.name); setCohortIds(m.cohortIds); }}>Edit</button></td>

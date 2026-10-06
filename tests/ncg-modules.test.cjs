@@ -94,3 +94,19 @@ test('directory separates shared programmes and saves cohort assignments without
   w = c.updateNcgModuleEntry(w, row.key, 'Valid', []);
   assert.deepEqual(c.ncgModuleEntries(w).find(m => m.key === row.key).cohortIds, ['cohort-1']);
 });
+
+test('schedule derives unscheduled entries and edited names from the directory, preserving actual and imported records', () => {
+  let w = f.emptyWorkflow();
+  assert.equal(c.ncgScheduleRows(w).length, 55);
+  w = c.updateNcgModuleEntry(w, 'ACS100:HSC', 'HSC study skills', ['cohort-2']);
+  const assessment = { id: 'scheduled', module: 'ACS100', subject: 'Health and Social Care', cohortId: 'cohort-1', name: 'Essay', issueDate: '2026-10-01' };
+  const imported = { ...assessment, id: 'external', module: 'EXT101' };
+  w.assessments.push(assessment, imported);
+  const rows = c.ncgScheduleRows(w);
+  assert.equal(rows.filter(r => r.code === 'ACS100').length, 4);
+  const scheduled = rows.find(r => r.key === 'scheduled');
+  assert.equal(scheduled.name, 'HSC study skills');
+  assert.strictEqual(scheduled.assessment, assessment);
+  assert.ok(rows.some(r => r.code === 'ACS100' && r.cohortId === 'cohort-2' && !r.assessment));
+  assert.strictEqual(rows.find(r => r.key === 'external').assessment, imported);
+});

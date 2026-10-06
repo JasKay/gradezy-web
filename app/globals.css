@@ -1079,3 +1079,9 @@ body {
 .wf-module-editor fieldset { display: flex; flex-wrap: wrap; gap: 10px 20px; border: 1px solid #dce5df; border-radius: 8px; padding: 12px; }
 .wf-module-editor fieldset label { display: flex; align-items: center; gap: 6px; }
 .wf-module-editor-actions { display: flex; gap: 8px; }
+
+.wf-module-directory td { vertical-align: top; padding-top: 14px; padding-bottom: 14px; }
+.wf-module-directory td small, .wf-module-line { display: block; margin-top: 6px; line-height: 1.5; }
+.wf-module-directory td small { font-size: 12px; color: #63776c; }
+.wf-module-directory .wf-module-assessments a { display: block; margin-top: 6px; padding: 8px 0; }
+.wf-module-editor fieldset { display: grid; grid-template-columns: 1fr; }

@@ -1,4 +1,4 @@
-import type { Subject, Workflow } from "./workflow";
+import type { Assessment, Subject, Workflow } from "./workflow";
 
 export const ORGANISATION = "NCG";
 export const PROGRAMMES = {
@@ -109,4 +109,19 @@ export function updateNcgModuleEntry(w: Workflow, key: string, name: string, coh
   if (!name.trim()) throw new Error("Enter a module name.");
   if (cohortIds.some(id => !w.cohorts.some(c => c.id === id))) throw new Error("Choose an existing cohort.");
   return { ...w, moduleEntries: [...(w.moduleEntries || []).filter(m => m.key !== key), { key, name: name.trim(), cohortIds: [...new Set(cohortIds)] }] };
+}
+
+type NcgScheduleRow = { key: string; code: string; name: string; programme: ProgrammeCode | ""; cohortId: string; assessment: Assessment | undefined };
+export function ncgScheduleRows(w: Workflow): NcgScheduleRow[] {
+  const entries = ncgModuleEntries(w);
+  const rows = entries.flatMap<NcgScheduleRow>(m => {
+    const cohorts = m.cohortIds.length ? m.cohortIds : [""];
+    return cohorts.flatMap<NcgScheduleRow>(cohortId => {
+      const assessments = m.assessments.filter(a => a.cohortId === cohortId);
+      return assessments.length ? assessments.map(assessment => ({ key: assessment.id, code: m.code, name: m.name, programme: m.programme as ProgrammeCode | "", cohortId, assessment })) : [{ key: m.key + ":" + cohortId, code: m.code, name: m.name, programme: m.programme as ProgrammeCode | "", cohortId, assessment: undefined }];
+    });
+  });
+  // Retain imported assessments outside the NCG catalogue.
+  w.assessments.filter(a => !entries.some(m => m.assessments.some(existing => existing.id === a.id))).forEach(assessment => rows.push({ key: assessment.id, code: assessment.module, name: assessment.operations?.moduleName || assessment.module, programme: programmeForSubject(assessment.subject) || "", cohortId: assessment.cohortId, assessment }));
+  return rows;
 }

@@ -44,7 +44,7 @@ const fs = require('node:fs');
     await page.goto(base + '/assessments');
     await page.getByRole('button', { name: 'Assessment schedule', exact: true }).click();
     await upload('Import assessment tracker from Excel', [['Cohort', 'Module Code', 'Assessment', 'Programme'], ['Cohort 1', 'BUS101', 'Report', 'Business']]);
-    await page.getByRole('heading', { name: 'Report', exact: true }).waitFor();
+    await page.getByRole('link', { name: 'Report', exact: true }).waitFor();
     await page.goto(base + '/progress');
     await page.getByRole('button', { name: 'Update checkpoints', exact: false }).first().click();
     await page.getByLabel('Progress 1 -W4', { exact: true }).fill('On track');
