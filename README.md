@@ -15,7 +15,7 @@ Open http://localhost:3000/dashboard. The development environment used for this 
 
 ## Workflow
 
-1. **Cohorts & enrolments:** six initial cohorts. Cohort 1 starts October 2023 and Cohort 2 starts February 2024; other start months remain blank until confirmed. Add student IDs, names and enrolments in Business Management, Computer Science, or Health and Social Care. One student identity supports multiple subject/cohort enrolments.
+1. **Cohorts & enrolments:** six initial cohorts. C1 October 2023, C2 February 2024, C3 October 2024, C4 February 2025, C5 October 2025 and C6 February 2026. Add student IDs, names and enrolments in Business Management, Computer Science, or Health and Social Care. One student identity supports multiple subject/cohort enrolments.
 2. **Assessment tracker:** create an assessment for a subject/cohort. Its roster is generated from enrolments. Use Sync enrolments to add subsequently enrolled students without replacing existing progress.
 3. **Timeline:** editable calendar-day offsets from each assessment's issue date. Defaults: allocation +3, resubmission +7, marking +10, internal moderation +21 and grade release +30. Keep targets separate from actual completion. Completed-late milestones remain labelled; unfinished overdue work remains visible downstream. A submitted record counts as having no outstanding resubmission.
 4. **Markers & progress:** add staff to the marker directory. Allocate individually or assign all unallocated records to a chosen marker. Record submission/resubmission state, grades and delay notes. Grades may be numeric or subject-specific codes; no grading scale is assumed.
@@ -26,7 +26,7 @@ Assessment list, progress tracker, dashboard, marker workload and assistant chec
 
 ## Tracker imports
 
-CSV/XLSX/XLS imports read the first worksheet, accept up to 5 MB / 5,000 rows, and show a preview before committing. Headers are matched without regard to spaces or case. Imports are validated atomically: an invalid row prevents the entire import. Download blank templates from the relevant screen.
+CSV/XLSX/XLS tracker imports let staff choose a worksheet, accept up to 5 MB / 5,000 rows, and show a preview before committing. Headers are matched without regard to spaces or case. Imports are validated atomically: an invalid row prevents the entire import. Download blank templates from the relevant screen.
 
 Enrolment columns:
 
@@ -80,3 +80,13 @@ Domain regression tests cover calendar dates, enrolments, roster synchronisation
 ## Next integration inputs
 
 Before replacing browser storage for a shared staff deployment, establish staff roles, a real authentication provider, a database and backup/audit requirements. An accepted StaffAdvantage template is needed to finalise column selection, assessment/attempt identifiers, allowable grade codes and the exact upload format. This version prepares CSV snapshots and records manual acceptance; it does not claim to have uploaded to StaffAdvantage.
+
+## Detailed trackers and sample workspace
+
+New empty workspaces contain 54 synthetic students and 18 sample assessments across all six cohorts and three subjects. Sample IDs start DEMO and sample records can be removed without deleting real imports. Students have NCG/ESL identifiers, campus, lecturer, group, programme, email and status. Download filtered cohort workbooks with student, assessment, learning and marking sheets.
+
+Progress Tracker records learning tasks and Week 4/Week 8 checkpoints, lecturer comments and retention comments. Marking Allocation separately preserves original and resubmission paper IDs, similarity/AI scores, markers, grades, moderator comments and final grades. Selecting an attempt for the active result reopens approval. Imported source flags never grant approval or confirm an upload.
+
+Assessment details preserve module metadata and operational checks including standardisation, SAM forms, internal moderation, external examiner samples and campus upload flags. Dates imported from source trackers remain distinct from the editable issue-date timeline.
+
+Data sources registers SharePoint/SIMS/StaffAdvantage file links and import history. Workbook imports work now; automated SharePoint and SIMS sync require connected credentials and source mappings. These registrations do not fetch data automatically. Browser-local persistence and existing authentication limitations still apply.

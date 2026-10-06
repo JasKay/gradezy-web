@@ -11,6 +11,15 @@ import {
   type FormEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CohortDirectory,
+  LearningTracker,
+  MarkingTracker,
+  AssessmentOperations,
+  SpreadsheetImport,
+  SourceRegister,
+} from "@/components/tracker-workspace";
+import { populateSamples } from "@/lib/tracker-sheets";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -53,7 +62,9 @@ export type WorkspaceView =
   | "assistant"
   | "new"
   | "detail"
-  | "progress";
+  | "progress"
+  | "marking"
+  | "sources";
 type Commit = (change: (w: Workflow) => Workflow, message: string) => boolean;
 const titles: Record<WorkspaceView, string> = {
   overview: "Assessment operations",
@@ -64,7 +75,9 @@ const titles: Record<WorkspaceView, string> = {
   assistant: "Assessment assistant",
   new: "New assessment",
   detail: "Assessment workspace",
-  progress: "Progress tracker",
+  progress: "Progress Tracker",
+  marking: "Marking Allocation",
+  sources: "Data sources",
 };
 const links = [
   { label: "Overview", href: "/dashboard" },
@@ -72,6 +85,8 @@ const links = [
   { label: "Enrolments", href: "/students" },
   { label: "Progress", href: "/progress" },
   { label: "Markers", href: "/markers" },
+  { label: "Marking", href: "/marking" },
+  { label: "Sources", href: "/sources" },
   { label: "Uploads", href: "/uploads" },
   { label: "Assistant", href: "/assistant" },
 ];
@@ -189,7 +204,14 @@ export function WorkflowWorkspace({
   useEffect(() => {
     const load = () => {
       try {
-        setW(readWorkflow(localStorage));
+        let loaded = readWorkflow(localStorage);
+        if (
+          !localStorage.getItem(WORKFLOW_KEY) &&
+          !loaded.students.length &&
+          !loaded.assessments.length
+        )
+          loaded = saveWorkflow(populateSamples(loaded), localStorage);
+        setW(loaded);
         setDate(today());
         setError("");
       } catch (e) {
@@ -299,16 +321,36 @@ export function WorkflowWorkspace({
           />
         ) : (
           <>
+            {w.students.some((s) => s.sample) && (
+              <div className="wf-message info">
+                Sample data is loaded. Dummy student IDs begin DEMO; real
+                imports remain separately identified.{" "}
+                <Link href="/students">
+                  View or download the cohort workbooks
+                </Link>
+              </div>
+            )}
             {view === "overview" && <Overview w={w} date={date} />}
-            {(view === "assessments" || view === "progress") && (
-              <AssessmentList
+            {view === "assessments" && (
+              <AssessmentList w={w} date={date} progress={false} />
+            )}
+            {view === "enrolments" && (
+              <>
+                <CohortDirectory w={w} commit={commit} />
+                <Enrolments w={w} commit={commit} />
+              </>
+            )}
+            {view === "progress" && <LearningTracker w={w} commit={commit} />}
+            {view === "marking" && <MarkingTracker w={w} commit={commit} />}
+            {view === "sources" && <SourceRegister w={w} commit={commit} />}
+            {view === "markers" && <Markers w={w} commit={commit} />}
+            {view === "assessments" && (
+              <SpreadsheetImport
                 w={w}
-                date={date}
-                progress={view === "progress"}
+                commit={commit}
+                defaultKind="assessments"
               />
             )}
-            {view === "enrolments" && <Enrolments w={w} commit={commit} />}
-            {view === "markers" && <Markers w={w} commit={commit} />}
             {view === "new" && <AssessmentForm w={w} commit={commit} />}
             {view === "detail" &&
               (selected ? (
@@ -1001,6 +1043,10 @@ function AssessmentDetail({
           Upload preparation →
         </Link>
       </div>
+      <AssessmentOperations a={a} commit={commit} />
+      <Link className="wf-button" href="/marking">
+        Open full Marking Allocation tracker
+      </Link>
       {record && (
         <RecordEditor
           key={`${record.studentId}-${record.reviewedAt || ""}`}

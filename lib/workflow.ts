@@ -19,6 +19,8 @@ export type Student = {
   firstName: string;
   lastName: string;
   enrolments: { cohortId: string; subject: Subject }[];
+  profile?: Record<string, string>;
+  sample?: boolean;
 };
 export type Marker = { id: string; name: string };
 export type Progress = {
@@ -33,6 +35,11 @@ export type Progress = {
   reviewedAt?: string;
   releasedAt?: string;
   notes: string;
+  attempts?: {
+    first: Record<string, string>;
+    resubmission: Record<string, string>;
+  };
+  activeAttempt?: "first" | "resubmission";
 };
 export type Assessment = {
   id: string;
@@ -45,6 +52,8 @@ export type Assessment = {
   records: Progress[];
   legacy?: boolean;
   createdAt: string;
+  operations?: Record<string, string>;
+  sample?: boolean;
 };
 export type UploadRow = {
   studentId: string;
@@ -94,6 +103,28 @@ export type Workflow = {
   batches: Batch[];
   mapping: UploadMapping;
   templateConfirmed: boolean;
+  learningProgress?: {
+    assessmentId: string;
+    studentId: string;
+    values: Record<string, string>;
+  }[];
+  sources?: {
+    id: string;
+    label: string;
+    url: string;
+    system: string;
+    cohortId: string;
+    subject: string;
+  }[];
+  imports?: {
+    id: string;
+    fileName: string;
+    sheetName: string;
+    kind: string;
+    system: string;
+    at: string;
+    rows: number;
+  }[];
   activity: { id: string; at: string; text: string }[];
 };
 export const WORKFLOW_KEY = "gradezy_workflow_v1";
@@ -120,7 +151,14 @@ export function emptyWorkflow(): Workflow {
     cohorts: Array.from({ length: 6 }, (_, i) => ({
       id: `cohort-${i + 1}`,
       name: `Cohort ${i + 1}`,
-      startMonth: i === 0 ? "2023-10" : i === 1 ? "2024-02" : "",
+      startMonth: [
+        "2023-10",
+        "2024-02",
+        "2024-10",
+        "2025-02",
+        "2025-10",
+        "2026-02",
+      ][i],
     })),
     students: [],
     markers: [],
@@ -583,6 +621,17 @@ export function readWorkflow(storage: Pick<Storage, "getItem">): Workflow {
       throw new Error(
         "Workflow records are invalid. Download a backup before repairing them.",
       );
+    w.cohorts.forEach((c, i) => {
+      if (i < 6 && !c.startMonth)
+        c.startMonth = [
+          "2023-10",
+          "2024-02",
+          "2024-10",
+          "2025-02",
+          "2025-10",
+          "2026-02",
+        ][i];
+    });
     return w;
   }
   const w = emptyWorkflow();

@@ -66,12 +66,13 @@ function reviewed() {
   );
   return { w, a };
 }
-test("six cohorts with only known dates seeded", () => {
+test("six cohorts with the confirmed start dates", () => {
   const w = f.emptyWorkflow();
   assert.equal(w.cohorts.length, 6);
   assert.equal(w.cohorts[0].startMonth, "2023-10");
   assert.equal(w.cohorts[1].startMonth, "2024-02");
-  assert.equal(w.cohorts[2].startMonth, "");
+  assert.equal(w.cohorts[2].startMonth, "2024-10");
+    assert.equal(w.cohorts[5].startMonth, "2026-02");
 });
 test("calendar-day timelines cross month and year boundaries", () => {
   assert.equal(f.targetDate("2026-09-10", 3), "2026-09-13");

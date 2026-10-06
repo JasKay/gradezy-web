@@ -14,6 +14,48 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     viewport: { width: 1440, height: 1000 },
     acceptDownloads: true,
   });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem("gradezy_workflow_v1"))
+      localStorage.setItem(
+        "gradezy_workflow_v1",
+        JSON.stringify({
+          version: 1,
+          revision: 0,
+          cohorts: Array.from({ length: 6 }, (_, i) => ({
+            id: `cohort-${i + 1}`,
+            name: `Cohort ${i + 1}`,
+            startMonth: [
+              "2023-10",
+              "2024-02",
+              "2024-10",
+              "2025-02",
+              "2025-10",
+              "2026-02",
+            ][i],
+          })),
+          students: [],
+          markers: [],
+          assessments: [],
+          batches: [],
+          mapping: Object.fromEntries(
+            [
+              "ncgId",
+              "firstName",
+              "lastName",
+              "assessment",
+              "module",
+              "subject",
+              "cohort",
+              "grade",
+              "reviewer",
+              "reviewedAt",
+            ].map((f) => [f, f]),
+          ),
+          templateConfirmed: false,
+          activity: [],
+        }),
+      );
+  });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -29,7 +71,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
   await page
     .getByRole("button", { name: "Add enrolment", exact: true })
     .click();
-  await page.getByRole("cell", { name: "SMOKE001", exact: true }).waitFor();
+  await page
+    .getByRole("cell", { name: "SMOKE001", exact: true })
+    .first()
+    .waitFor();
   await page.getByLabel("Student / NCG ID", { exact: true }).fill("SMOKE001");
   await page.getByLabel("First name", { exact: true }).fill("Smoke");
   await page.getByLabel("Last name", { exact: true }).fill("Student");
