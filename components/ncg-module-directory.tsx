@@ -13,8 +13,8 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
   const [editing, setEditing] = useState("");
   const [name, setName] = useState("");
   const [cohortIds, setCohortIds] = useState<string[]>([]);
-  const entries = ncgModuleEntries(w);
-  const modules = entries.filter(m => (!programme || m.programme === programme) && (!cohort || m.cohortIds.includes(cohort)) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase()));
+  const entries = ncgModuleEntries(w).flatMap(m => (m.cohortIds.length ? m.cohortIds : [""]).map(cohortId => ({ ...m, cohortId, rowKey: m.key + ":" + cohortId })));
+  const modules = entries.filter(m => (!programme || m.programme === programme) && (!cohort || m.cohortId === cohort) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase()));
   return (
     <section className="wf-panel wf-module-directory">
       <div className="wf-panel-head"><h2>NCG modules</h2><span className="wf-muted">{modules.length} entries</span></div>
@@ -33,15 +33,15 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
         <thead><tr><th>Module code</th><th>Module name</th><th>Programme</th><th>Cohort</th><th>Assessments</th><th /></tr></thead>
         <tbody>
           {modules.map(m => {
-            const assessments = m.assessments.filter(a => !cohort || a.cohortId === cohort);
+            const assessments = m.assessments.filter(a => a.cohortId === m.cohortId);
             const scheduledCohorts = m.assessments.map(a => a.cohortId);
-            return <Fragment key={m.key}><tr>
+            return <Fragment key={m.rowKey}><tr>
               <td><strong>{m.code}</strong>{m.aliases?.map(alias => <small key={alias}>Also listed as {alias}</small>)}</td>
               <td>{m.name}</td><td><strong>{m.programme}</strong><small>{PROGRAMMES[m.programme].name}</small></td>
-              <td>{m.cohortIds.length ? m.cohortIds.map(id => <small key={id}>{w.cohorts.find(c => c.id === id)?.name}</small>) : <span className="wf-muted">Not assigned</span>}</td>
+              <td>{w.cohorts.find(c => c.id === m.cohortId)?.name || "Not assigned"}</td>
               <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map(a => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}<small>{w.cohorts.find(c => c.id === a.cohortId)?.name}</small></Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
-              <td><button className="wf-text-button" aria-label={"Edit " + m.code + " " + m.programme} aria-expanded={editing === m.key} onClick={() => { setEditing(editing === m.key ? "" : m.key); setName(m.name); setCohortIds(m.cohortIds); }}>Edit</button></td>
-            </tr>{editing === m.key && <tr><td colSpan={6}>
+              <td><button className="wf-text-button" aria-label={"Edit " + m.code + " " + m.programme + (m.cohortId ? " " + w.cohorts.find(c => c.id === m.cohortId)?.name : "")} aria-expanded={editing === m.rowKey} onClick={() => { setEditing(editing === m.rowKey ? "" : m.rowKey); setName(m.name); setCohortIds(m.cohortIds); }}>Edit</button></td>
+            </tr>{editing === m.rowKey && <tr><td colSpan={6}>
               <form className="wf-module-editor" onSubmit={e => { e.preventDefault(); if (commit(next => updateNcgModuleEntry(next, m.key, name, cohortIds), "Updated " + m.code + " (" + m.programme + ")")) setEditing(""); }}>
                 <label>Module name<input aria-label="Edit module name" required value={name} onChange={e => setName(e.target.value)} /></label>
                 <fieldset><legend>Cohorts</legend>{w.cohorts.map(c => <label key={c.id}><input type="checkbox" checked={cohortIds.includes(c.id)} disabled={scheduledCohorts.includes(c.id)} onChange={e => setCohortIds(e.target.checked ? [...cohortIds, c.id] : cohortIds.filter(id => id !== c.id))} />{c.name}</label>)}</fieldset>
