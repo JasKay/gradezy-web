@@ -1085,3 +1085,7 @@ body {
 .wf-module-directory td small { font-size: 12px; color: #63776c; }
 .wf-module-directory .wf-module-assessments a { display: block; margin-top: 6px; padding: 8px 0; }
 .wf-module-editor fieldset { display: grid; grid-template-columns: 1fr; }
+
+.wf-cohort-sort { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; padding: 0; cursor: pointer; }
+.wf-cohort-sort span { font-size: 16px; line-height: 1; }
+.wf-cohort-sort:focus-visible { outline: 2px solid #225c4b; outline-offset: 4px; }

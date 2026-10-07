@@ -110,3 +110,11 @@ test('schedule derives unscheduled entries and edited names from the directory, 
   assert.ok(rows.some(r => r.code === 'ACS100' && r.cohortId === 'cohort-2' && !r.assessment));
   assert.strictEqual(rows.find(r => r.key === 'external').assessment, imported);
 });
+
+test('cohort sort is numeric, reversible and keeps unassigned rows last', () => {
+  const w = f.emptyWorkflow();
+  w.cohorts.push({ id: 'cohort-10', name: 'Cohort 10', startMonth: '' });
+  const ids = ['cohort-6', '', 'cohort-2', 'cohort-1', 'cohort-10'];
+  assert.deepEqual([...ids].sort((a,b) => c.compareCohorts(w,a,b)), ['cohort-1','cohort-2','cohort-6','cohort-10','']);
+  assert.deepEqual([...ids].sort((a,b) => c.compareCohorts(w,a,b,true)), ['cohort-10','cohort-6','cohort-2','cohort-1','']);
+});

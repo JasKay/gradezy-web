@@ -125,3 +125,10 @@ export function ncgScheduleRows(w: Workflow): NcgScheduleRow[] {
   w.assessments.filter(a => !entries.some(m => m.assessments.some(existing => existing.id === a.id))).forEach(assessment => rows.push({ key: assessment.id, code: assessment.module, name: assessment.operations?.moduleName || assessment.module, programme: programmeForSubject(assessment.subject) || "", cohortId: assessment.cohortId, assessment }));
   return rows;
 }
+
+export function compareCohorts(w: Workflow, left: string, right: string, descending = false): number {
+  if (!left || !right) return left === right ? 0 : !left ? 1 : -1;
+  const a = w.cohorts.find(c => c.id === left)?.name || left;
+  const b = w.cohorts.find(c => c.id === right)?.name || right;
+  return a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }) * (descending ? -1 : 1);
+}

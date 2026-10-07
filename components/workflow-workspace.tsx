@@ -21,7 +21,6 @@ import {
 } from "@/components/tracker-workspace";
 
 import { removeSamples } from "@/lib/tracker-sheets";
-import { populatePracticeData } from "@/lib/practice-workspace";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
 import { NcgAssessmentSchedule } from "@/components/ncg-assessment-schedule";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
@@ -209,11 +208,6 @@ export function WorkflowWorkspace({
     const load = () => {
       try {
         let loaded = removeSamples(readWorkflow(localStorage));
-        if (localStorage.getItem("gradezy_practice_opt_out") !== "true" && localStorage.getItem("gradezy_tracker_examples_v2") !== "true") {
-          const populated = populatePracticeData(loaded);
-          if (populated !== loaded) loaded = saveWorkflow(populated, localStorage);
-          localStorage.setItem("gradezy_tracker_examples_v2", "true");
-        }
         const aligned = alignPracticeModules(loaded);
         if (aligned !== loaded) loaded = saveWorkflow(aligned, localStorage);
         setW(loaded);
@@ -710,7 +704,7 @@ function AssessmentForm({
     const requested = normalizeProgramme(params.get("programme") || "");
     const programme = requested && ncgModule?.programmes.includes(requested) ? requested : ncgModule?.programmes[0] || "BM";
     return {
-      id: "", name: "", module: ncgModule?.code || "", cohortId: w.cohorts[0]?.id || "",
+      id: "", name: "", module: ncgModule?.code || "", cohortId: "",
       subject: PROGRAMMES[programme].subject, issueDate: today(), offsets: defaultOffsets(),
       records: [], createdAt: "",
       operations: ncgModule ? { moduleName: ncgModuleEntries(w).find(m => m.code === ncgModule.code && m.programme === programme)?.name || ncgModule.name, programme: PROGRAMMES[programme].name } : {},
@@ -827,6 +821,7 @@ function AssessmentForm({
               value={draft.cohortId}
               onChange={(e) => setDraft({ ...draft, cohortId: e.target.value })}
             >
+              <option value="">Choose cohort</option>
               {w.cohorts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

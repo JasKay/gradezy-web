@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useState } from "react";
-import { PROGRAMMES, ncgModuleEntries, updateNcgModuleEntry, type ProgrammeCode } from "@/lib/ncg-modules";
+import { compareCohorts, PROGRAMMES, ncgModuleEntries, updateNcgModuleEntry, type ProgrammeCode } from "@/lib/ncg-modules";
 import type { Workflow } from "@/lib/workflow";
 
 type Commit = (change: (w: Workflow) => Workflow, message: string) => boolean;
@@ -10,11 +10,12 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
   const [search, setSearch] = useState("");
   const [programme, setProgramme] = useState<ProgrammeCode | "">("");
   const [cohort, setCohort] = useState("");
+  const [descending, setDescending] = useState(false);
   const [editing, setEditing] = useState("");
   const [name, setName] = useState("");
   const [cohortIds, setCohortIds] = useState<string[]>([]);
   const entries = ncgModuleEntries(w).flatMap(m => (m.cohortIds.length ? m.cohortIds : [""]).map(cohortId => ({ ...m, cohortId, rowKey: m.key + ":" + cohortId })));
-  const modules = entries.filter(m => (!programme || m.programme === programme) && (!cohort || m.cohortId === cohort) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase()));
+  const modules = entries.filter(m => (!programme || m.programme === programme) && (!cohort || m.cohortId === cohort) && (m.code + " " + m.name + " " + (m.aliases || []).join(" ")).toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => compareCohorts(w, a.cohortId, b.cohortId, descending));
   return (
     <section className="wf-panel wf-module-directory">
       <div className="wf-panel-head"><h2>NCG modules</h2><span className="wf-muted">{modules.length} entries</span></div>
@@ -30,7 +31,7 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
         </select>
       </div>
       <div className="wf-table-wrap"><table>
-        <thead><tr><th>Module code</th><th>Module name</th><th>Programme</th><th>Cohort</th><th>Assessments</th><th /></tr></thead>
+        <thead><tr><th>Module code</th><th>Module name</th><th>Programme</th><th aria-sort={descending ? "descending" : "ascending"}><button className="wf-cohort-sort" onClick={() => setDescending(!descending)} aria-label={descending ? "Sort cohorts ascending" : "Sort cohorts descending"}>Cohort <span aria-hidden="true">{descending ? "\u2304" : "\u2303"}</span></button></th><th>Assessments</th><th /></tr></thead>
         <tbody>
           {modules.map(m => {
             const assessments = m.assessments.filter(a => a.cohortId === m.cohortId);
@@ -39,7 +40,7 @@ export function NcgModuleDirectory({ w, commit }: { w: Workflow; commit: Commit 
               <td><strong>{m.code}</strong>{m.aliases?.map(alias => <small key={alias}>Also listed as {alias}</small>)}</td>
               <td>{m.name}</td><td><strong>{m.programme}</strong><small>{PROGRAMMES[m.programme].name}</small></td>
               <td>{w.cohorts.find(c => c.id === m.cohortId)?.name || "Not assigned"}</td>
-              <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map(a => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}<small>{w.cohorts.find(c => c.id === a.cohortId)?.name}</small></Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
+              <td>{assessments.length ? <details className="wf-module-assessments"><summary>{assessments.length} scheduled</summary>{assessments.map(a => <Link key={a.id} href={"/workflow/" + a.id}>{a.name}</Link>)}</details> : <span className="wf-muted">Not scheduled</span>}</td>
               <td><button className="wf-text-button" aria-label={"Edit " + m.code + " " + m.programme + (m.cohortId ? " " + w.cohorts.find(c => c.id === m.cohortId)?.name : "")} aria-expanded={editing === m.rowKey} onClick={() => { setEditing(editing === m.rowKey ? "" : m.rowKey); setName(m.name); setCohortIds(m.cohortIds); }}>Edit</button></td>
             </tr>{editing === m.rowKey && <tr><td colSpan={6}>
               <form className="wf-module-editor" onSubmit={e => { e.preventDefault(); if (commit(next => updateNcgModuleEntry(next, m.key, name, cohortIds), "Updated " + m.code + " (" + m.programme + ")")) setEditing(""); }}>

@@ -104,6 +104,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
   await page
     .getByLabel("Module code", { exact: true })
     .fill("SMOKE-A1");
+  await page.getByLabel("Cohort", { exact: true }).selectOption("cohort-1");
   await page.getByLabel("Issue date", { exact: true }).fill("2026-09-10");
   await page
     .getByRole("button", { name: "Create assessment", exact: true })
