@@ -106,6 +106,7 @@ export function removePracticeData(w: Workflow): Workflow {
   const next = structuredClone(w);
   next.students = next.students.filter((s) => !s.id.startsWith(prefix));
   next.assessments = next.assessments.filter((a) => !a.id.startsWith(prefix)).map((a) => ({ ...a, records: a.records.filter((r) => !r.studentId.startsWith(prefix)) }));
+  next.moduleProgress = next.moduleProgress?.filter(p => !p.studentId.startsWith(prefix));
   next.learningProgress = next.learningProgress?.filter((p) => !p.studentId.startsWith(prefix) && !p.assessmentId.startsWith(prefix));
   next.markers = next.markers.filter((m) => !m.id.startsWith(prefix) || next.assessments.some((a) => a.records.some((r) => r.markerId === m.id)));
   next.imports = next.imports?.filter((i) => !i.id.startsWith(prefix));

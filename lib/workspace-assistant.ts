@@ -32,8 +32,9 @@ export function searchWorkspace(w: Workflow, question: string, date = today()): 
   const namedStudent = question.match(/\b(?:NCG|ESL)\d+\b/i)?.[0];
   if (namedStudent && !w.students.some((s) => norm(s.ncgId) === norm(namedStudent) || norm(s.profile?.eslId || "") === norm(namedStudent)))
     return result("I couldn't find that student ID in this workspace.", []);
+  const progressQuestion = /\b(progress|checkpoint|checkpoints|behind|support|week|retention)\b/.test(q);
   const catalogueModule = namedModule ? findNcgModule(namedModule) : undefined;
-  if (catalogueModule && !w.assessments.some((a) => normalizeModuleCode(a.module) === catalogueModule.code)) {
+  if (!progressQuestion && catalogueModule && !w.assessments.some((a) => normalizeModuleCode(a.module) === catalogueModule.code)) {
     return { answer: catalogueModule.code + " - " + catalogueModule.name + "\n" + catalogueModule.programmes.map((code) => code + " - " + PROGRAMMES[code].name).join(", ") + "\nNo assessments have been scheduled for this module yet.", links: [{ label: "Add assessment", href: "/assessments/new?module=" + catalogueModule.code }] };
   }
   if (/\bmodules?\b/.test(q) && /list|show|which|available|catalogue|catalog|how many/.test(q) && !namedModule) {
@@ -41,7 +42,7 @@ export function searchWorkspace(w: Workflow, question: string, date = today()): 
     return { answer: catalogue.length + " NCG modules.\n" + catalogue.map((m) => m.code + " - " + m.name).join("\n"), links: [{ label: "NCG module catalogue", href: "/assessments" }] };
   }
   const namedCohort = q.match(/\bcohort\s+(\d+)\b/)?.[1];
-  if ((namedModule && !w.assessments.some((a) => normalizeModuleCode(a.module) === normalizeModuleCode(namedModule))) || (namedCohort && !cohorts.length))
+  if ((namedModule && !(progressQuestion && catalogueModule) && !w.assessments.some((a) => normalizeModuleCode(a.module) === normalizeModuleCode(namedModule))) || (namedCohort && !cohorts.length))
     return result("I couldn't find that module or cohort in this workspace.", []);
   if (/\b(submi|submission|submitted|resubmission)/.test(q)) {
     const resub = /resubmission|resubmit/.test(q);
@@ -54,16 +55,12 @@ export function searchWorkspace(w: Workflow, question: string, date = today()): 
     const matches = rows.filter(({ r }) => done ? isReviewed(r, w) : canReview(r, w) && !isReviewed(r, w));
     return result(matches.length + (done ? " reviewed results." : " results ready for review."), matches.map((row) => label(row) + (done ? ": reviewed." : ": marked and submitted. Next: approve the grade review.")));
   }
-  if (/\b(progress|checkpoint|checkpoints|behind|support|week|retention)\b/.test(q)) {
-    const progress = (w.learningProgress || []).filter((p) => assessments.some((a) => a.id === p.assessmentId) && (!students.length || students.some((s) => s.id === p.studentId)) && (!markers.length || rows.some((row) => row.r.studentId === p.studentId)));
-    const needsSupport = /behind|support|risk|retention|follow up|need/.test(q);
-    const matches = progress.filter((p) => !needsSupport || /behind|support|not started/i.test(p.values.progress1 + " " + p.values.progress2));
-    return result(matches.length + (needsSupport ? " students need a progress follow-up." : " learning progress records."), matches.map((p) => {
-      const a = w.assessments.find((a) => a.id === p.assessmentId)!;
-      const s = w.students.find((s) => s.id === p.studentId);
-      link(a.id, a.module);
-      return (s ? s.firstName + " " + s.lastName : "Student") + " - " + a.module + ": Week 4 " + (p.values.progress1 || "not recorded") + "; Week 8 " + (p.values.progress2 || "not recorded") + (needsSupport ? ". Next: arrange a check-in." : "");
-    }));
+  if (progressQuestion) {
+    const scoped=(module:string,cohortId:string,subjectName:string,studentId:string)=> (!namedModule || normalizeModuleCode(module)===normalizeModuleCode(namedModule)) && (!modules.length || modules.some(m=>normalizeModuleCode(m)===normalizeModuleCode(module))) && (!cohorts.length || cohorts.some(c=>c.id===cohortId)) && (!subject || subjectName===subject) && (!students.length || students.some(s=>s.id===studentId)) && (!markers.length || rows.some(row=>row.r.studentId===studentId));
+    const progress=[...(w.moduleProgress || []).filter(p=>scoped(p.module,p.cohortId,p.subject,p.studentId)),...(w.learningProgress || []).flatMap(p=>{const a=w.assessments.find(a=>a.id===p.assessmentId);if(!a || !scoped(a.module,a.cohortId,a.subject,p.studentId) || w.moduleProgress?.some(m=>m.studentId===p.studentId && m.cohortId===a.cohortId && m.subject===a.subject && m.module===normalizeModuleCode(a.module)))return [];return [{...p,module:a.module,cohortId:a.cohortId,subject:a.subject}];})];
+    const needsSupport=/behind|support|risk|retention|follow up|need/.test(q);
+    const matches=progress.filter(p=>!needsSupport || /behind|support|not started|attendance|withdraw/i.test(p.values.progress1+' '+p.values.progress2+' '+p.values.retentionComment1+' '+p.values.retentionComment2));
+    return result(matches.length+(needsSupport?' students need a progress follow-up.':' learning progress records.'),matches.map(p=>{const s=w.students.find(s=>s.id===p.studentId),cohort=w.cohorts.find(c=>c.id===p.cohortId)?.name || p.cohortId;const href='/progress?module='+encodeURIComponent(p.module)+'&cohort='+encodeURIComponent(p.cohortId)+'&subject='+encodeURIComponent(p.subject);if(!links.some(l=>l.href===href))links.push({label:p.module+' / '+cohort,href});return (s?s.firstName+' '+s.lastName:'Student')+' - '+p.module+' / '+cohort+': Week 4 '+(p.values.progress1 || 'not recorded')+'; Week 8 '+(p.values.progress2 || 'not recorded')+(needsSupport?'. Next: arrange a check-in.':'');}));
   }
   if (/\b(unallocated|allocation|allocate|allocated)\b/.test(q) && !/balance|workload|how much|how many/.test(q) && !markers.length) {
     const assigned = /already|allocated/.test(q) && !/unallocated|not|missing|awaiting/.test(q);

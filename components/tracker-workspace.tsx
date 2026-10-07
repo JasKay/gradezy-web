@@ -23,7 +23,7 @@ import {
   type SheetKind,
 } from "@/lib/tracker-sheets";
 type Commit = (fn: (w: Workflow) => Workflow, message: string) => boolean;
-async function saveExcel(
+export async function saveExcel(
   name: string,
   sheets: { name: string; rows: string[][] }[],
 ) {
@@ -34,7 +34,7 @@ async function saveExcel(
   );
   X.writeFile(book, `${name}.xlsx`);
 }
-function Box({
+export function Box({
   title,
   children,
   actions,
@@ -52,7 +52,7 @@ function Box({
     </section>
   );
 }
-function StudentModal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
+export function StudentModal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const heading = useId();
   useEffect(() => {
@@ -91,7 +91,7 @@ function Input({
     </label>
   );
 }
-function FormFields({
+export function FormFields({
   fields,
   values,
   onChange,

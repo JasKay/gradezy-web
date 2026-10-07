@@ -105,6 +105,7 @@ export type Workflow = {
   templateConfirmed: boolean;
   moduleOfferingEdits?: { key: string; name: string; cohortId: string }[];
   moduleEntries?: { key: string; name: string; cohortIds: string[] }[];
+  moduleProgress?: { module: string; cohortId: string; subject: Subject; studentId: string; values: Record<string, string>; updatedAt: string; history: { at: string; values: Record<string, string> }[] }[];
   learningProgress?: {
     assessmentId: string;
     studentId: string;

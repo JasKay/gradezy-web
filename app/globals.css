@@ -1098,3 +1098,7 @@ body {
 .wf-student-modal .wf-disclosure { margin: 0; }
 .wf-student-modal .wf-disclosure > summary { display: none; }
 @media (max-width: 640px) { .wf-student-modal-body { padding: 10px; } .wf-panel-head { flex-wrap: wrap; gap: 12px; } }
+
+.wf-marker-summary { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #52705c; }
+.wf-history-entry { border-top: 1px solid #dce5df; margin-top: 12px; padding-top: 12px; }
+.wf-history-entry p { margin: 6px 0; }

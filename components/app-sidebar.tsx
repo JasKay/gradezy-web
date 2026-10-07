@@ -5,9 +5,8 @@ const routes = [
   { href: "/dashboard", label: "Overview", icon: "▦" },
   { href: "/students", label: "Cohorts & enrolments", icon: "◉" },
   { href: "/assessments", label: "Assessment tracker", icon: "▤" },
-  { href: "/progress", label: "Progress Tracker", icon: "◷" },
+  { href: "/progress", label: "Progress & marking", icon: "◷" },
   { href: "/markers", label: "Marker directory", icon: "♧" },
-  { href: "/marking", label: "Marking Allocation", icon: "▤" },
   { href: "/sources", label: "Integrations", icon: "◇" },
 ];
 export function AppSidebar({
@@ -42,7 +41,7 @@ export function AppSidebar({
                     path.startsWith("/workflow")
                   : r.href === "/students"
                     ? path.startsWith("/students")
-                    : path === r.href;
+                    : r.href === "/progress" ? path === "/progress" || path === "/marking" : path === r.href;
               return (
                 <Link
                   key={r.href}

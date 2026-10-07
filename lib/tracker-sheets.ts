@@ -48,6 +48,11 @@ export const ATTEMPT_COLUMNS = [
   ["finalGrade", "Final Grade"],
   ["ncgComment", "Comment for NCG (0 - DNS, 0 - TZ, 40 - Late, 40 -True)"],
   ["difference", "Difference Check"],
+  ["outcome", "Outcome (DNS / TZ / Late / True)"],
+  ["thirdMarker", "3rd Marker Name"],
+  ["thirdGrade", "3rd Marker Grade"],
+  ["thirdComment", "3rd Marker Comment"],
+  ["sstFinalComment", "SST Final Comment"],
 ] as const;
 export const RESUB_COLUMNS = ATTEMPT_COLUMNS.map(
   ([key, label]) =>
@@ -361,7 +366,7 @@ export function applySpreadsheet(
         if (kind === "marking") {
           const attempts = attemptValues(headers, cells);
           for (const attempt of Object.values(attempts))
-            for (const key of ["grade", "imGrade", "finalGrade"])
+            for (const key of ["grade", "imGrade", "thirdGrade", "finalGrade"])
               if (
                 attempt[key] &&
                 (!Number.isFinite(Number(attempt[key])) ||

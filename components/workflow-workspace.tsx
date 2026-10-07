@@ -13,8 +13,6 @@ import {
 import { useRouter } from "next/navigation";
 import {
   CohortDirectory,
-  LearningTracker,
-  MarkingTracker,
   AssessmentOperations,
   SpreadsheetImport,
   SourceRegister,
@@ -26,6 +24,7 @@ import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant
 import { NcgAssessmentSchedule } from "@/components/ncg-assessment-schedule";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
 import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, ncgDirectoryRows, ncgModuleEntries, alignPracticeModules } from "@/lib/ncg-modules";
+import { ModuleTrackerWorkspace } from "@/components/module-tracker-workspace";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -81,17 +80,16 @@ const titles: Record<WorkspaceView, string> = {
   assistant: "Assessment assistant",
   new: "New assessment",
   detail: "Assessment workspace",
-  progress: "Progress Tracker",
-  marking: "Marking Allocation",
+  progress: "Module workspace",
+  marking: "Module workspace",
   sources: "Integrations",
 };
 const links = [
   { label: "Overview", href: "/dashboard" },
   { label: "Assessments", href: "/assessments" },
   { label: "Enrolments", href: "/students" },
-  { label: "Progress", href: "/progress" },
+  { label: "Progress & marking", href: "/progress" },
   { label: "Markers", href: "/markers" },
-  { label: "Marking", href: "/marking" },
   { label: "Integrations", href: "/sources" },
 ];
 function formatDate(value: string) {
@@ -335,8 +333,8 @@ export function WorkflowWorkspace({
                 <CohortDirectory w={w} commit={commit} addStudent={close => <Enrolments w={w} commit={commit} onDone={close} />} />
               </>
             )}
-            {view === "progress" && <LearningTracker w={w} commit={commit} />}
-            {view === "marking" && <MarkingTracker w={w} commit={commit} />}
+            {view === "progress" && <ModuleTrackerWorkspace w={w} commit={commit} />}
+            {view === "marking" && <ModuleTrackerWorkspace w={w} commit={commit} initialTab="marking" />}
             {view === "sources" && <SourceRegister />}
             {view === "markers" && <Markers w={w} commit={commit} />}
             {view === "assessments" && (
