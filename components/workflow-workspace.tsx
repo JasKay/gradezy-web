@@ -24,7 +24,7 @@ import { removeSamples } from "@/lib/tracker-sheets";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
 import { NcgAssessmentSchedule } from "@/components/ncg-assessment-schedule";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
-import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, ncgModuleEntries, alignPracticeModules } from "@/lib/ncg-modules";
+import { NCG_MODULES, PROGRAMMES, findNcgModule, normalizeModuleCode, normalizeProgramme, programmeForSubject, subjectLabel, ncgDirectoryRows, ncgModuleEntries, alignPracticeModules } from "@/lib/ncg-modules";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SUBJECTS,
@@ -734,12 +734,16 @@ function AssessmentForm({
     if (ncgModule && (!programme || !ncgModule.programmes.includes(programme))) errors.push("Choose a programme offered for this NCG module.");
     if (!w.cohorts.some((c) => c.id === draft.cohortId))
       errors.push("Choose a cohort.");
+    const offered = ncgDirectoryRows(w).filter(row => normalizeModuleCode(row.code) === normalizeModuleCode(draft.module) && row.programme === programme && row.cohortId === draft.cohortId);
+    if (offered.length > 1 && !offered.some(row => row.term === draft.operations?.semester)) errors.push("Choose the semester for this module.");
     if (errors.length) return setError(errors.join(" "));
+    const offering = offered.length === 1 ? offered[0] : offered.find(row => row.term === draft.operations?.semester);
+    const resolvedDraft = offering ? { ...draft, operations: { ...draft.operations, moduleName: offering.name, semester: offering.term } } : draft;
     const a = existing
-      ? draft
+      ? resolvedDraft
       : syncRoster(
           {
-            ...draft,
+            ...resolvedDraft,
             id: crypto.randomUUID(),
             createdAt: new Date().toISOString(),
           },
@@ -819,7 +823,7 @@ function AssessmentForm({
             <select
               disabled={!!existing?.records.length && !!existing.subject}
               value={draft.cohortId}
-              onChange={(e) => setDraft({ ...draft, cohortId: e.target.value })}
+              onChange={(e) => setDraft({ ...draft, cohortId: e.target.value, operations: { ...draft.operations, semester: "" } })}
             >
               <option value="">Choose cohort</option>
               {w.cohorts.map((c) => (
@@ -829,6 +833,7 @@ function AssessmentForm({
               ))}
             </select>
           </Field>
+          {ncgDirectoryRows(w).filter(row => normalizeModuleCode(row.code) === normalizeModuleCode(draft.module) && row.programme === programmeForSubject(draft.subject) && row.cohortId === draft.cohortId).length > 1 && <Field label="Semester"><select value={draft.operations?.semester || ""} onChange={e => setDraft({ ...draft, operations: { ...draft.operations, semester: e.target.value } })}><option value="">Choose semester</option>{ncgDirectoryRows(w).filter(row => normalizeModuleCode(row.code) === normalizeModuleCode(draft.module) && row.programme === programmeForSubject(draft.subject) && row.cohortId === draft.cohortId).map(row => <option key={row.rowKey} value={row.term}>{row.term}</option>)}</select></Field>}
           <Field label="Issue date">
             <input
               required

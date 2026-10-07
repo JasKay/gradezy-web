@@ -1,3 +1,4 @@
+import { NCG_OFFERINGS } from "./ncg-offerings";
 import type { Assessment, Subject, Workflow } from "./workflow";
 
 export const ORGANISATION = "NCG";
@@ -111,18 +112,38 @@ export function updateNcgModuleEntry(w: Workflow, key: string, name: string, coh
   return { ...w, moduleEntries: [...(w.moduleEntries || []).filter(m => m.key !== key), { key, name: name.trim(), cohortIds: [...new Set(cohortIds)] }] };
 }
 
-type NcgScheduleRow = { key: string; code: string; name: string; programme: ProgrammeCode | ""; cohortId: string; assessment: Assessment | undefined };
-export function ncgScheduleRows(w: Workflow): NcgScheduleRow[] {
-  const entries = ncgModuleEntries(w);
-  const rows = entries.flatMap<NcgScheduleRow>(m => {
-    const cohorts = m.cohortIds.length ? m.cohortIds : [""];
-    return cohorts.flatMap<NcgScheduleRow>(cohortId => {
-      const assessments = m.assessments.filter(a => a.cohortId === cohortId);
-      return assessments.length ? assessments.map(assessment => ({ key: assessment.id, code: m.code, name: m.name, programme: m.programme as ProgrammeCode | "", cohortId, assessment })) : [{ key: m.key + ":" + cohortId, code: m.code, name: m.name, programme: m.programme as ProgrammeCode | "", cohortId, assessment: undefined }];
+type NcgScheduleRow = { term?: string; key: string; code: string; name: string; programme: ProgrammeCode | ""; cohortId: string; assessment: Assessment | undefined };
+export function ncgDirectoryRows(w: Workflow) {
+  const claimed = new Set<string>();
+  return NCG_OFFERINGS.map(source => {
+    const rowKey = source.term + ":" + source.code + ":" + source.programme;
+    const edit = w.moduleOfferingEdits?.find(e => e.key === rowKey);
+    const cohortId = edit?.cohortId || w.cohorts.find(c => c.name.trim().toLowerCase() === "cohort " + source.cohort)?.id || "cohort-" + source.cohort;
+    const assessments = w.assessments.filter(a => {
+      if (claimed.has(a.id) || normalizeModuleCode(a.module) !== normalizeModuleCode(source.code) || programmeForSubject(a.subject) !== source.programme || a.cohortId !== cohortId) return false;
+      if (a.operations?.semester && a.operations.semester !== source.term) return false;
+      claimed.add(a.id);
+      return true;
     });
+    return { ...source, rowKey, cohortId, name: edit?.name || source.name, assessments };
   });
-  // Retain imported assessments outside the NCG catalogue.
-  w.assessments.filter(a => !entries.some(m => m.assessments.some(existing => existing.id === a.id))).forEach(assessment => rows.push({ key: assessment.id, code: assessment.module, name: assessment.operations?.moduleName || assessment.module, programme: programmeForSubject(assessment.subject) || "", cohortId: assessment.cohortId, assessment }));
+}
+
+export function updateNcgOffering(w: Workflow, key: string, name: string, cohortId: string): Workflow {
+  const row = ncgDirectoryRows(w).find(r => r.rowKey === key);
+  if (!row) throw new Error("Module entry not found.");
+  if (!name.trim()) throw new Error("Enter a module name.");
+  if (!w.cohorts.some(c => c.id === cohortId)) throw new Error("Choose an existing cohort.");
+  if (row.assessments.length && cohortId !== row.cohortId) throw new Error("Edit the assessment schedule to change its cohort.");
+  return { ...w, moduleOfferingEdits: [...(w.moduleOfferingEdits || []).filter(e => e.key !== key), { key, name: name.trim(), cohortId }] };
+}
+
+export function ncgScheduleRows(w: Workflow): NcgScheduleRow[] {
+  const entries = ncgDirectoryRows(w);
+  const rows = entries.flatMap<NcgScheduleRow>(m => m.assessments.length ? m.assessments.map(assessment => ({ key: assessment.id, code: m.code, name: m.name, term: m.term, programme: m.programme, cohortId: m.cohortId, assessment })) : [{ key: m.rowKey, code: m.code, name: m.name, term: m.term, programme: m.programme, cohortId: m.cohortId, assessment: undefined }]);
+  // Existing assessments outside the supplied offerings retain their records and schedule.
+  const matched = new Set(entries.flatMap(m => m.assessments.map(a => a.id)));
+  w.assessments.filter(a => !matched.has(a.id)).forEach(assessment => rows.push({ key: assessment.id, code: assessment.module, name: assessment.operations?.moduleName || assessment.module, programme: programmeForSubject(assessment.subject) || "", cohortId: assessment.cohortId, assessment }));
   return rows;
 }
 

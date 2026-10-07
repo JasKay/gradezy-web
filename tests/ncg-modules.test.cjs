@@ -95,20 +95,26 @@ test('directory separates shared programmes and saves cohort assignments without
   assert.deepEqual(c.ncgModuleEntries(w).find(m => m.key === row.key).cohortIds, ['cohort-1']);
 });
 
-test('schedule derives unscheduled entries and edited names from the directory, preserving actual and imported records', () => {
+test('99 supplied offerings keep cohort and semester identities and independent edits', () => {
   let w = f.emptyWorkflow();
-  assert.equal(c.ncgScheduleRows(w).length, 55);
-  w = c.updateNcgModuleEntry(w, 'ACS100:HSC', 'HSC study skills', ['cohort-2']);
-  const assessment = { id: 'scheduled', module: 'ACS100', subject: 'Health and Social Care', cohortId: 'cohort-1', name: 'Essay', issueDate: '2026-10-01' };
+  const rows = c.ncgDirectoryRows(w);
+  assert.equal(rows.length, 99);
+  assert.deepEqual([1,2,3,4,5,6].map(n => rows.filter(r => r.cohortId === 'cohort-' + n).length), [16,12,18,18,21,14]);
+  assert.equal(rows.filter(r => r.code === 'ACS100' && r.cohortId === 'cohort-5').length, 3);
+  assert.equal(rows.filter(r => r.code === 'IHS305' && r.cohortId === 'cohort-2').length, 2);
+  assert.ok(rows.some(r => r.code === 'IH201' && r.cohortId === 'cohort-3'));
+  w = c.updateNcgOffering(w, 'C1S5:BM301:BM', 'Edited strategy', 'cohort-1');
+  assert.equal(c.ncgDirectoryRows(w).find(r => r.rowKey === 'C1S5:BM301:BM').name, 'Edited strategy');
+  assert.equal(c.ncgDirectoryRows(w).find(r => r.rowKey === 'C2S5:BM301:BM').name, 'Business Strategy');
+  assert.throws(() => c.updateNcgOffering(w, 'C1S5:BM301:BM', ' ', 'cohort-1'));
+  const assessment = { id: 'scheduled', module: 'IHS305', subject: 'Health and Social Care', cohortId: 'cohort-2', name: 'Dissertation', operations: { semester: 'C2S6' } };
   const imported = { ...assessment, id: 'external', module: 'EXT101' };
   w.assessments.push(assessment, imported);
-  const rows = c.ncgScheduleRows(w);
-  assert.equal(rows.filter(r => r.code === 'ACS100').length, 4);
-  const scheduled = rows.find(r => r.key === 'scheduled');
-  assert.equal(scheduled.name, 'HSC study skills');
-  assert.strictEqual(scheduled.assessment, assessment);
-  assert.ok(rows.some(r => r.code === 'ACS100' && r.cohortId === 'cohort-2' && !r.assessment));
-  assert.strictEqual(rows.find(r => r.key === 'external').assessment, imported);
+  assert.equal(c.ncgDirectoryRows(w).find(r => r.rowKey === 'C2S6:IHS305:HSC').assessments.length, 1);
+  assert.equal(c.ncgDirectoryRows(w).find(r => r.rowKey === 'C2S5:IHS305:HSC').assessments.length, 0);
+  assert.equal(c.ncgScheduleRows(w).length, 100);
+  assert.strictEqual(c.ncgScheduleRows(w).find(r => r.key === 'external').assessment, imported);
+  assert.throws(() => c.updateNcgOffering(w, 'C2S6:IHS305:HSC', 'Dissertation', 'cohort-1'));
 });
 
 test('cohort sort is numeric, reversible and keeps unassigned rows last', () => {

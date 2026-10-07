@@ -103,6 +103,7 @@ export type Workflow = {
   batches: Batch[];
   mapping: UploadMapping;
   templateConfirmed: boolean;
+  moduleOfferingEdits?: { key: string; name: string; cohortId: string }[];
   moduleEntries?: { key: string; name: string; cohortIds: string[] }[];
   learningProgress?: {
     assessmentId: string;

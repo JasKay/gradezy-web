@@ -20,7 +20,7 @@ export function NcgAssessmentSchedule({ w, date }: { w: Workflow; date: string }
     </div>
     <div className="wf-table-wrap"><table><thead><tr><th>Module</th><th>Programme</th><th aria-sort={descending ? "descending" : "ascending"}><button className="wf-cohort-sort" onClick={() => setDescending(!descending)} aria-label={descending ? "Sort cohorts ascending" : "Sort cohorts descending"}>Cohort <span aria-hidden="true">{descending ? "\u2304" : "\u2303"}</span></button></th><th>Assessment</th><th>Issue date</th><th>Status</th></tr></thead><tbody>
       {rows.map(row => <tr key={row.key}>
-        <td><strong>{row.code}</strong><span className="wf-module-line">{row.name}</span></td>
+        <td><strong>{row.code}</strong><span className="wf-module-line">{row.name}</span>{row.term && <small>{row.term}</small>}</td>
         <td>{row.programme ? <><strong>{row.programme}</strong><small>{PROGRAMMES[row.programme].name}</small></> : "To confirm"}</td>
         <td>{w.cohorts.find(c => c.id === row.cohortId)?.name || "Not assigned"}</td>
         <td>{row.assessment ? <Link className="wf-text-button" href={"/workflow/" + row.assessment.id}>{row.assessment.name}</Link> : <span className="wf-muted">Awaiting assessment</span>}</td>
