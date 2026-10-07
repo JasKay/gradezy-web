@@ -1,7 +1,7 @@
 ﻿"use client";
 import Link from "next/link";
-import { subjectLabel } from "@/lib/ncg-modules";
-import { useState } from "react";
+import { ncgDirectoryRows, programmeForSubject, PROGRAMMES, subjectLabel } from "@/lib/ncg-modules";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   SUBJECTS,
   isReviewed,
@@ -17,6 +17,8 @@ import {
   ATTEMPT_COLUMNS,
   RESUB_COLUMNS,
   parseSpreadsheet,
+  subjectFor,
+  cohortFor,
   applySpreadsheet,
   type SheetKind,
 } from "@/lib/tracker-sheets";
@@ -35,19 +37,37 @@ async function saveExcel(
 function Box({
   title,
   children,
+  actions,
 }: {
   title: string;
   children: React.ReactNode;
+  actions?: React.ReactNode;
 }) {
   return (
     <section className="wf-panel">
       <div className="wf-panel-head">
-        <h2>{title}</h2>
+        <h2>{title}</h2>{actions}
       </div>
       <div className="wf-form">{children}</div>
     </section>
   );
 }
+function StudentModal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const heading = useId();
+  useEffect(() => {
+    const dialog = ref.current;
+    dialog?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { dialog?.close(); document.body.style.overflow = previous; };
+  }, []);
+  return <dialog ref={ref} className="wf-student-modal" aria-labelledby={heading} onCancel={e => { e.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
+    <div className="wf-student-modal-head"><h2 id={heading}>{title}</h2><button className="wf-button" aria-label="Close dialog" onClick={close}>Close</button></div>
+    <div className="wf-student-modal-body">{children}</div>
+  </dialog>;
+}
+
 function Input({
   label,
   value,
@@ -98,11 +118,15 @@ export function SpreadsheetImport({
   commit,
   defaultKind = "students",
   assessmentId,
+  expanded = false,
+  onComplete,
 }: {
   w: Workflow;
   commit: Commit;
   defaultKind?: SheetKind;
   assessmentId?: string;
+  expanded?: boolean;
+  onComplete?: () => void;
 }) {
   const [kind, setKind] = useState<SheetKind>(defaultKind);
   const [cohortId, setCohort] = useState(w.cohorts[0]?.id || "");
@@ -173,7 +197,7 @@ export function SpreadsheetImport({
           ? [...STUDENT_COLUMNS, ...ATTEMPT_COLUMNS, ...RESUB_COLUMNS]
           : STUDENT_COLUMNS;
   return (
-    <details className="wf-disclosure">
+    <details className="wf-disclosure" open={expanded || undefined}>
       <summary>Import {defaultKind === "students" ? "students" : defaultKind === "assessments" ? "assessment tracker" : defaultKind === "learning" ? "progress tracker" : "marking tracker"} from Excel</summary>
       <Box title="Upload workbook">
       <div className="wf-form-grid three">
@@ -226,9 +250,9 @@ export function SpreadsheetImport({
           </select>
         </label>
         <label className="wf-field">
-          <span>Default subject</span>
+          <span>Default programme</span>
           <select
-            aria-label="Default subject"
+            aria-label="Default programme"
             value={subject}
             onChange={(e) => setSubject(e.target.value as Subject)}
           >
@@ -271,9 +295,9 @@ export function SpreadsheetImport({
         )}
       </div>
       <p className="wf-muted">
-        Recognised programme names select the subject automatically. The default
-        subject applies when a programme cannot be recognised. Learning and
-        marking trackers use the selected assessment&apos;s cohort and subject.
+        Recognised programme names select the programme automatically. The default
+        programme applies when a programme cannot be recognised. Learning and
+        marking trackers use the selected assessment&apos;s cohort and programme.
       </p>
       <div className="wf-actions">
         <label className="wf-button">
@@ -360,6 +384,7 @@ export function SpreadsheetImport({
                 ) {
                   setSheets([]);
                   setFile("");
+                  onComplete?.();
                 }
               }}
             >
@@ -391,10 +416,13 @@ function studentCells(s: Student) {
 export function CohortDirectory({
   w,
   commit,
+  addStudent,
 }: {
   w: Workflow;
   commit: Commit;
+  addStudent: (close: () => void) => React.ReactNode;
 }) {
+  const [modal, setModal] = useState<"add" | "import" | "">("");
   const [cid, setCid] = useState(w.cohorts[0]?.id || "");
   const [subject, setSubject] = useState("");
   const [search, setSearch] = useState("");
@@ -431,7 +459,7 @@ export function CohortDirectory({
   }
   return (
     <>
-      <Box title="Students">
+      <Box title="Students" actions={<div className="wf-actions"><button className="wf-button" onClick={() => setModal("import")}>Import students from Excel</button><button className="wf-button primary" onClick={() => setModal("add")}>Add student</button></div>}>
         <div className="wf-filters">
           <select
             aria-label="Directory cohort"
@@ -446,11 +474,11 @@ export function CohortDirectory({
             ))}
           </select>
           <select
-            aria-label="Directory subject"
+            aria-label="Directory programme"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           >
-            <option value="">All subjects</option>
+            <option value="">All programmes</option>
             {SUBJECTS.map((s) => (
               <option key={s} value={s}>{subjectLabel(s)}</option>
             ))}
@@ -476,25 +504,20 @@ export function CohortDirectory({
           <table>
             <thead>
               <tr>
-                <th>Student ID</th><th>Name</th><th>Cohort</th><th>Programme</th><th>Campus</th>
-                <th>Profile</th>
+                <th>NCG ID</th><th>ESL ID</th><th>First Name</th><th>Last Name</th><th>Campus</th><th>Group Code</th><th>Program Name</th><th>ESL Email</th><th>Student Status</th>
               </tr>
             </thead>
             <tbody>
-              {!enrolmentRows.length && <tr><td colSpan={6}>No students in this selection. Add a student or import a workbook.</td></tr>}
+              {!enrolmentRows.length && <tr><td colSpan={9}>No students in this selection. Add a student or import a workbook.</td></tr>}
               {enrolmentRows.map(({ student: s, enrolment }) => (
                 <tr key={s.id + ":" + enrolment.cohortId + ":" + enrolment.subject}>
-                  <td>{s.ncgId}</td><td>{s.firstName} {s.lastName}</td>
-                  <td>{w.cohorts.find(c => c.id === enrolment.cohortId)?.name}</td><td>{subjectLabel(enrolment.subject)}</td>
+                  <td>{s.ncgId}</td><td>{s.profile?.eslId || "—"}</td>
+                  <td><button className="wf-text-button" aria-label={"View student " + s.firstName + " " + s.lastName} onClick={() => setSelected(s.id)}>{s.firstName}</button></td>
+                  <td><button className="wf-text-button" aria-label={"View student " + s.firstName + " " + s.lastName + " details"} onClick={() => setSelected(s.id)}>{s.lastName}</button></td>
                   <td>{s.profile?.campus || "—"}</td>
-                  <td>
-                    <button
-                      className="wf-text-button"
-                      onClick={() => setSelected(s.id)}
-                    >
-                      View student →
-                    </button>
-                  </td>
+                  <td>{s.profile?.groupCode && /^C(\d+)/i.exec(s.profile.groupCode)?.[1] === w.cohorts.find(c => c.id === enrolment.cohortId)?.name.match(/\d+/)?.[0] ? s.profile.groupCode : w.cohorts.find(c => c.id === enrolment.cohortId)?.name || "—"}</td>
+                  <td>{s.profile?.programme && enrolment.subject === subjectFor(s.profile.programme) ? s.profile.programme : subjectLabel(enrolment.subject)}</td>
+                  <td>{s.profile?.email || "—"}</td><td>{s.profile?.status || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -502,15 +525,16 @@ export function CohortDirectory({
         </div>
       </Box>
       {student && (
-        <StudentProfile
+        <StudentModal title={student.firstName + " " + student.lastName} close={() => setSelected("")}><StudentProfile
           key={student.id}
           s={student}
           w={w}
           commit={commit}
           close={() => setSelected("")}
-        />
+        /></StudentModal>
       )}
-      <SpreadsheetImport w={w} commit={commit} />
+      {modal === "import" && <StudentModal title="Import students" close={() => setModal("")}><SpreadsheetImport w={w} commit={commit} expanded onComplete={() => setModal("")} /></StudentModal>}
+      {modal === "add" && <StudentModal title="Add student" close={() => setModal("")}>{addStudent(() => setModal(""))}</StudentModal>}
 
     </>
   );
@@ -527,6 +551,8 @@ function StudentProfile({
   close: () => void;
 }) {
   const [profile, setProfile] = useState({ ...s.profile });
+  const [profileError, setProfileError] = useState("");
+  const courses = ncgDirectoryRows(w).filter(row => s.enrolments.some(e => e.cohortId === row.cohortId && programmeForSubject(e.subject) === row.programme));
   return (
     <Box title={`${s.firstName} ${s.lastName} · ${s.ncgId}`}>
       <div className="wf-actions">
@@ -534,7 +560,7 @@ function StudentProfile({
           {s.enrolments
             .map(
               (e) =>
-                `${w.cohorts.find((c) => c.id === e.cohortId)?.name} / ${e.subject}`,
+                `${w.cohorts.find((c) => c.id === e.cohortId)?.name} / ${subjectLabel(e.subject)}`,
             )
             .join(" · ")}
         </span>
@@ -542,6 +568,10 @@ function StudentProfile({
           Close student
         </button>
       </div>
+      <div className="wf-table-wrap"><table><thead><tr><th>Cohort</th><th>Programme</th><th>Module code</th><th>Module name</th></tr></thead><tbody>
+        {courses.map(course => <tr key={course.rowKey}><td>{w.cohorts.find(c => c.id === course.cohortId)?.name}</td><td>{PROGRAMMES[course.programme].name}</td><td>{course.code}<small>{course.term}</small></td><td>{course.name}</td></tr>)}
+        {!courses.length && <tr><td colSpan={4}>No NCG modules for this enrolment yet.</td></tr>}
+      </tbody></table></div>
       <FormFields
         fields={STUDENT_COLUMNS.filter(
           ([key]) => !["ncgId", "firstName", "lastName"].includes(key),
@@ -551,15 +581,21 @@ function StudentProfile({
       />
       <button
         className="wf-button primary"
-        onClick={() =>
+        onClick={() => {
+          const group = profile.groupCode ? cohortFor(w, profile.groupCode) : undefined;
+          const programme = profile.programme ? subjectFor(profile.programme) : undefined;
+          if (profile.groupCode && /^c\d/i.test(profile.groupCode) && (!group || !s.enrolments.some(e => e.cohortId === group.id && (!programme || e.subject === programme)))) { setProfileError("Group Code must match the student enrolment cohort and programme."); return; }
+          if (programme && !s.enrolments.some(e => e.subject === programme)) { setProfileError("Program Name must match an enrolled programme."); return; }
+          setProfileError("");
           commit((next) => {
             next.students.find((x) => x.id === s.id)!.profile = profile;
             return next;
-          }, `Updated student profile ${s.ncgId}.`)
-        }
+          }, `Updated student profile ${s.ncgId}.`);
+        }}
       >
         Save student details
       </button>
+      {profileError && <p role="alert">{profileError}</p>}
       <div className="wf-table-wrap">
         <table>
           <thead>
@@ -905,7 +941,7 @@ export function MarkingTracker({ w }: { w: Workflow; commit: Commit }) {
     <div className="wf-filters">
       <select aria-label="Marking module" value={module} onChange={(e) => setModule(e.target.value)}><option value="">All modules</option>{Array.from(new Set(w.assessments.map((a) => a.module))).map((m) => <option key={m}>{m}</option>)}</select>
       <select aria-label="Marking cohort" value={cohort} onChange={(e) => setCohort(e.target.value)}><option value="">All cohorts</option>{w.cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-      <select aria-label="Marking subject" value={subject} onChange={(e) => setSubject(e.target.value)}><option value="">All subjects</option>{SUBJECTS.map((s) => <option key={s} value={s}>{subjectLabel(s)}</option>)}</select>
+      <select aria-label="Marking programme" value={subject} onChange={(e) => setSubject(e.target.value)}><option value="">All programmes</option>{SUBJECTS.map((s) => <option key={s} value={s}>{subjectLabel(s)}</option>)}</select>
       <Link className="wf-button" href="/progress">Progress tracker →</Link>
     </div>
     <div className="wf-table-wrap"><table><thead><tr><th>Marker</th><th>Module</th><th>Programme</th><th>Cohort</th><th>Allocated</th><th>Marked</th></tr></thead><tbody>

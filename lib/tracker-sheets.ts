@@ -125,7 +125,9 @@ export function subjectFor(programme: string): Subject | undefined {
   if (/business|management/.test(key)) return "Business Management";
 }
 export function cohortFor(w: Workflow, label: string) {
-  const key = label.trim().toLowerCase().replace(/\s/g, "");
+  const raw = label.trim().toLowerCase().replace(/\s/g, "");
+  const group = raw.match(/^c(\d+)(?:l\d+)?s\d+$/);
+  const key = group ? "c" + group[1] : raw;
   return w.cohorts.find(
     (c) =>
       c.name.toLowerCase().replace(/\s/g, "") === key ||
@@ -317,10 +319,13 @@ export function applySpreadsheet(
           throw new Error("Duplicate NCG ID in the selected worksheet.");
         seen.add(id);
         const rowCohort = fieldAt(headers, "cohort", "Cohort");
+        const groupCohort = v.groupCode ? cohortFor(next, v.groupCode) : undefined;
+        if (v.groupCode && /^c\d/i.test(v.groupCode) && !groupCohort) throw new Error("Unknown cohort in Group Code.");
+        if (rowCohort >= 0 && groupCohort && cohortFor(next, cells[rowCohort])?.id !== groupCohort.id) throw new Error("Group Code and Cohort must match.");
         const cohortId =
           rowCohort >= 0
             ? cohortFor(next, cells[rowCohort])?.id
-            : a?.cohortId || selection.cohortId;
+            : groupCohort?.id || a?.cohortId || selection.cohortId;
         if (!cohortId) throw new Error("Unknown cohort.");
         const subject = (a?.subject ||
           subjectFor(v.programme) ||

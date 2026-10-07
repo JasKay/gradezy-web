@@ -200,7 +200,7 @@ export function validateSchedule(a: Assessment): string[] {
   if (!a.name.trim() || !a.module.trim())
     errors.push("Assessment name and module code are required.");
   if (!SUBJECTS.includes(a.subject as Subject))
-    errors.push("Choose a subject.");
+    errors.push("Choose a programme.");
   if (!targetDate(a.issueDate, 0)) errors.push("Choose a valid issue date.");
   if (
     STAGES.some(
@@ -331,7 +331,7 @@ export function blockers(a: Assessment, w: Workflow): string[] {
         ),
   ).length;
   if (unenrolled)
-    reasons.push(unenrolled + " student subject enrolments need confirmation.");
+    reasons.push(unenrolled + " student programme enrolments need confirmation.");
   const count = (predicate: (r: Progress) => boolean) =>
     a.records.filter(predicate).length;
   const missingIds = count(
@@ -458,7 +458,7 @@ export function importEnrolments(w: Workflow, rows: ImportRow[]): Workflow {
     );
     if (!ncgId || !firstName || !lastName || !cohort || !subject)
       throw new Error(
-        `Row ${index + 2}: provide ncgId, firstName, lastName, a known cohort and subject.`,
+        `Row ${index + 2}: provide ncgId, firstName, lastName, a known cohort and programme.`,
       );
     let student = next.students.find(
       (s) => canonicalId(s.ncgId) === canonicalId(ncgId),

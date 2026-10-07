@@ -4,6 +4,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(() => localStorage.setItem("gradezy_students_20_v1", "true"));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -14,6 +15,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gradezy_workflow_v1'))?.assessments.length || 0), 0);
     await page.goto(base + '/settings');
     await page.getByRole('button', { name: 'Load practice records', exact: true }).click();
+    await page.getByText('Practice records are ready. Open Overview or the trackers to explore them.', { exact: true }).waitFor();
     await page.goto(base + '/dashboard');
     await page.getByRole('heading', { name: 'Ask Gradezy', exact: true }).waitFor();
     let w = await saved();
@@ -60,8 +62,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal((await saved()).students.length, 1);
     await page.goto(base + '/settings');
     await page.getByRole('button', { name: 'Load practice records', exact: true }).click();
+    await page.getByText('Practice records are ready. Open Overview or the trackers to explore them.', { exact: true }).waitFor();
     assert.equal((await saved()).students.length, 37);
     await page.getByRole('button', { name: 'Load practice records', exact: true }).click();
+    await page.getByText('Practice records are ready. Open Overview or the trackers to explore them.', { exact: true }).waitFor();
     assert.equal((await saved()).students.length, 37);
     // Simulate an existing student-only browser workspace from before this update.
     await page.evaluate(() => {
@@ -78,6 +82,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal((await saved()).assessments.length, 0);
     await page.goto(base + '/settings');
     await page.getByRole('button', { name: 'Load practice records', exact: true }).click();
+    await page.getByText('Practice records are ready. Open Overview or the trackers to explore them.', { exact: true }).waitFor();
     w = await saved();
     assert.equal(w.students.length, 37);
     assert.equal(w.assessments.length, 18);

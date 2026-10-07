@@ -7,6 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const page = await context.newPage(); const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3001';
+    await page.addInitScript(() => localStorage.setItem('gradezy_students_20_v1', 'true'));
     await page.goto(base + '/assessments');
     await page.getByRole('heading', { name: 'NCG modules', exact: true }).waitFor();
     assert.equal(await page.locator('tbody tr').count(), 99);

@@ -283,3 +283,17 @@ test("invalid marking rows abort the entire import", () => {
   );
   assert.equal(w.assessments[0].records[0].grade, "");
 });
+
+test('NCG student layout derives the cohort from Group Code and keeps profile fields', () => {
+  const w = f.emptyWorkflow();
+  const headers = ['NCG ID','ESL ID','First Name','Last Name','Campus','Group Code','Program Name','ESL Email','Student Status'];
+  const row = ['2341452','129685','Ailton','Dos Reis Quaresma','Birmingham - York House','C4L5S2','FdSc Computing','2502-129685@esl.ac.uk','Active'];
+  const selection = { cohortId: 'cohort-1', subject: 'Business Management', fileName:'students.xlsx', sheetName:'Students', system:'Excel' };
+  const result = t.applySpreadsheet(w, 'students', headers, [row], selection);
+  assert.deepEqual(result.students[0].enrolments, [{ cohortId:'cohort-4', subject:'Computer Science' }]);
+  assert.equal(result.students[0].profile.groupCode, 'C4L5S2');
+  assert.equal(result.students[0].profile.programme, 'FdSc Computing');
+  assert.equal(result.students[0].profile.email, '2502-129685@esl.ac.uk');
+  assert.equal(t.cohortFor(w, 'C1S5').id, 'cohort-1');
+  assert.throws(() => t.applySpreadsheet(w, 'students', [...headers,'Cohort'], [[...row,'Cohort 2']], selection), /must match/);
+});

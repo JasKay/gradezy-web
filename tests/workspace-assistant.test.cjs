@@ -129,3 +129,23 @@ test('restoring tracker examples preserves edited assessment records', () => {
   assert.equal(repaired.assessments[0].name, 'Edited assessment');
   assert.equal(repaired.assessments[0].records[0].notes, 'Keep this note');
 });
+
+test('student examples fill all six cohorts to 20 with balanced offered programmes and preserve edits', () => {
+ const { populateStudentExamples } = load('lib/student-examples.ts');
+ let w = populateStudentExamples(f.emptyWorkflow());
+ assert.equal(w.students.length, 120);
+ assert.equal(w.assessments.length, 0);
+ for(const cohort of w.cohorts) {
+  const students = w.students.filter(s => s.enrolments.some(e => e.cohortId === cohort.id));
+  assert.equal(students.length, 20);
+  assert.equal(new Set(students.map(s=>s.firstName+' '+s.lastName)).size, 20);
+  const counts = f.SUBJECTS.map(subject=>students.filter(s=>s.enrolments.some(e=>e.cohortId===cohort.id&&e.subject===subject)).length);
+  assert.deepEqual(counts, ['cohort-2','cohort-6'].includes(cohort.id)?[10,0,10]:[7,7,6]);
+  assert.ok(students.every(s=>s.profile.groupCode.startsWith('C'+cohort.name.match(/\d+/)[0]+'L')));
+ }
+ w.students[0].firstName='Preserved';
+ assert.strictEqual(populateStudentExamples(w),w);
+ assert.equal(w.students[0].firstName,'Preserved');
+ assert.equal(new Set(w.students.map(s=>s.ncgId)).size,120);
+ assert.equal(p.removePracticeData(w).students.length,0);
+});

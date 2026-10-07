@@ -1089,3 +1089,12 @@ body {
 .wf-cohort-sort { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; padding: 0; cursor: pointer; }
 .wf-cohort-sort span { font-size: 16px; line-height: 1; }
 .wf-cohort-sort:focus-visible { outline: 2px solid #225c4b; outline-offset: 4px; }
+
+.wf-student-modal { width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid #dce5df; border-radius: 16px; color: #344c3d; background: #f7faf8; }
+.wf-student-modal::backdrop { background: rgb(14 30 22 / 45%); }
+.wf-student-modal-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 24px; position: sticky; top: 0; z-index: 2; background: #fff; border-bottom: 1px solid #dce5df; }
+.wf-student-modal-head h2 { margin: 0; font-size: 20px; }
+.wf-student-modal-body { padding: 20px; }
+.wf-student-modal .wf-disclosure { margin: 0; }
+.wf-student-modal .wf-disclosure > summary { display: none; }
+@media (max-width: 640px) { .wf-student-modal-body { padding: 10px; } .wf-panel-head { flex-wrap: wrap; gap: 12px; } }

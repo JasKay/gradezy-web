@@ -15,7 +15,7 @@ export function NcgAssessmentSchedule({ w, date }: { w: Workflow; date: string }
     <div className="wf-panel-head"><h2>Assessment schedule</h2><span className="wf-muted">{rows.length} entries</span></div>
     <div className="wf-filters">
       <input aria-label="Search assessments" placeholder="Search assessment or module" value={search} onChange={e => setSearch(e.target.value)} />
-      <select aria-label="Filter subject" value={programme} onChange={e => setProgramme(e.target.value)}><option value="">All programmes</option>{(Object.keys(PROGRAMMES) as ProgrammeCode[]).map(code => <option key={code} value={code}>{PROGRAMMES[code].name}</option>)}</select>
+      <select aria-label="Filter programme" value={programme} onChange={e => setProgramme(e.target.value)}><option value="">All programmes</option>{(Object.keys(PROGRAMMES) as ProgrammeCode[]).map(code => <option key={code} value={code}>{PROGRAMMES[code].name}</option>)}</select>
       <select aria-label="Filter cohort" value={cohort} onChange={e => setCohort(e.target.value)}><option value="">All cohorts</option>{w.cohorts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
     </div>
     <div className="wf-table-wrap"><table><thead><tr><th>Module</th><th>Programme</th><th aria-sort={descending ? "descending" : "ascending"}><button className="wf-cohort-sort" onClick={() => setDescending(!descending)} aria-label={descending ? "Sort cohorts ascending" : "Sort cohorts descending"}>Cohort <span aria-hidden="true">{descending ? "\u2304" : "\u2303"}</span></button></th><th>Assessment</th><th>Issue date</th><th>Status</th></tr></thead><tbody>

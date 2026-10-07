@@ -20,7 +20,8 @@ import {
   SourceRegister,
 } from "@/components/tracker-workspace";
 
-import { removeSamples } from "@/lib/tracker-sheets";
+import { applySpreadsheet, cohortFor, subjectFor, STUDENT_COLUMNS, removeSamples } from "@/lib/tracker-sheets";
+import { populateStudentExamples } from "@/lib/student-examples";
 import { searchWorkspace, type WorkspaceAnswer } from "@/lib/workspace-assistant";
 import { NcgAssessmentSchedule } from "@/components/ncg-assessment-schedule";
 import { NcgModuleDirectory } from "@/components/ncg-module-directory";
@@ -208,6 +209,11 @@ export function WorkflowWorkspace({
     const load = () => {
       try {
         let loaded = removeSamples(readWorkflow(localStorage));
+        if (localStorage.getItem("gradezy_students_20_v1") !== "true") {
+          const populated = populateStudentExamples(loaded);
+          if (populated !== loaded) loaded = saveWorkflow(populated, localStorage);
+          localStorage.setItem("gradezy_students_20_v1", "true");
+        }
         const aligned = alignPracticeModules(loaded);
         if (aligned !== loaded) loaded = saveWorkflow(aligned, localStorage);
         setW(loaded);
@@ -326,8 +332,7 @@ export function WorkflowWorkspace({
             )}
             {view === "enrolments" && (
               <>
-                <CohortDirectory w={w} commit={commit} />
-                <Enrolments w={w} commit={commit} />
+                <CohortDirectory w={w} commit={commit} addStudent={close => <Enrolments w={w} commit={commit} onDone={close} />} />
               </>
             )}
             {view === "progress" && <LearningTracker w={w} commit={commit} />}
@@ -430,7 +435,7 @@ function Overview({ w, date }: { w: Workflow; date: string }) {
           {!w.assessments.length ? (
             <Empty
               title="Start with your cohorts"
-              text="Add student subject enrolments, then create an assessment to build its roster."
+              text="Add student programme enrolments, then create an assessment to build its roster."
               href="/students"
               action="Set up enrolments"
             />
@@ -580,11 +585,11 @@ function AssessmentList({
           onChange={(e) => setSearch(e.target.value)}
         />
         <select
-          aria-label="Filter subject"
+          aria-label="Filter programme"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
         >
-          <option value="">All subjects</option>
+          <option value="">All programmes</option>
           {SUBJECTS.map((s) => (
             <option key={s} value={s}>{subjectLabel(s)}</option>
           ))}
@@ -609,7 +614,7 @@ function AssessmentList({
               ? "No matching assessments"
               : "Your tracker starts here"
           }
-          text="Create an assessment and connect it to a cohort and subject."
+          text="Create an assessment and connect it to a cohort and programme."
           href="/assessments/new"
           action="Create assessment"
         />
@@ -882,7 +887,7 @@ function AssessmentForm({
         </div>
         {!!existing?.records.length && (
           <p className="wf-muted">
-            An assessment with progress keeps its cohort and subject once
+            An assessment with progress keeps its cohort and programme once
             confirmed. Create a separate assessment for a different class.
           </p>
         )}
@@ -1102,7 +1107,7 @@ function AssessmentDetail({
         {!a.records.length ? (
           <Empty
             title="No students in this roster"
-            text="Add subject enrolments for this cohort, then sync them into the assessment."
+            text="Add programme enrolments for this cohort, then sync them into the assessment."
             href="/students"
             action="Add enrolments"
           />
@@ -1383,16 +1388,18 @@ function RecordEditor({
     </Panel>
   );
 }
-function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
+function Enrolments({ w, commit, onDone }: { w: Workflow; commit: Commit; onDone: () => void }) {
   const [form, setForm] = useState({
     ncgId: "",
     firstName: "",
     lastName: "",
     subject: SUBJECTS[0] as Subject,
     cohort: w.cohorts[0]?.name || "",
+    eslId: "", campus: "", groupCode: "", programme: "", email: "", status: "Active",
   });
+  const [formError, setFormError] = useState("");
   return (
-    <details className="wf-disclosure"><summary>Add student</summary>
+    <details className="wf-disclosure" open><summary>Add student</summary>
       <Panel
         title="Student details"
       >
@@ -1400,13 +1407,17 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
           className="wf-form"
           onSubmit={(e) => {
             e.preventDefault();
+            try {
+              applySpreadsheet(w, "students", STUDENT_COLUMNS.map(([, label]) => label), [STUDENT_COLUMNS.map(([key]) => String(form[key as keyof typeof form] || ""))], { cohortId: w.cohorts.find(c => c.name === form.cohort)?.id || "", subject: form.subject, fileName: "Manual entry", sheetName: "Students", system: "Manual entry" });
+            } catch (error) { setFormError(error instanceof Error ? error.message : "Check student details."); return; }
+            setFormError("");
             if (
               commit(
-                (next) => importEnrolments(next, [form]),
-                `Added ${form.subject} enrolment for ${form.firstName} ${form.lastName}.`,
+                (next) => applySpreadsheet(next, "students", STUDENT_COLUMNS.map(([, label]) => label), [STUDENT_COLUMNS.map(([key]) => String(form[key as keyof typeof form] || ""))], { cohortId: next.cohorts.find(c => c.name === form.cohort)?.id || "", subject: form.subject, fileName: "Manual entry", sheetName: "Students", system: "Manual entry" }),
+                `Added ${form.programme || subjectLabel(form.subject)} enrolment for ${form.firstName} ${form.lastName}.`,
               )
             )
-              setForm({ ...form, ncgId: "", firstName: "", lastName: "" });
+              onDone();
           }}
         >
           <div className="wf-form-grid three">
@@ -1443,7 +1454,8 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
                 ))}
               </select>
             </Field>
-            <Field label="Subject">
+            {(["eslId", "campus", "groupCode", "programme", "email", "status"] as const).map(key => <Field key={key} label={STUDENT_COLUMNS.find(([field]) => field === key)![1]}><input type={key === "email" ? "email" : "text"} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value, subject: key === "programme" ? subjectFor(e.target.value) || form.subject : form.subject, cohort: key === "groupCode" ? cohortFor(w, e.target.value)?.name || form.cohort : form.cohort })} /></Field>)}
+            <Field label="Programme">
               <select
                 value={form.subject}
                 onChange={(e) =>
@@ -1457,6 +1469,7 @@ function Enrolments({ w, commit }: { w: Workflow; commit: Commit }) {
             </Field>
           </div>
           <button className="wf-button primary">Add enrolment</button>
+          {formError && <p role="alert">{formError}</p>}
         </form>
       </Panel>
     </details>
@@ -1659,7 +1672,7 @@ function FileImport({
               <thead>
                 <tr>
                   {fields.map((f) => (
-                    <th key={f}>{f}</th>
+                    <th key={f}>{f === "subject" ? "Programme" : f}</th>
                   ))}
                 </tr>
               </thead>
@@ -1766,7 +1779,7 @@ function Uploads({ w, commit }: { w: Workflow; commit: Commit }) {
         >
           <div className="wf-form-grid three">
             {UPLOAD_FIELDS.map((f) => (
-              <Field key={f} label={f}>
+              <Field key={f} label={f === "subject" ? "Programme" : f}>
                 <input
                   required
                   value={mapping[f]}

@@ -57,6 +57,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         }),
       );
   });
+  await context.addInitScript(() => localStorage.setItem("gradezy_students_20_v1", "true"));
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -77,11 +78,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     .getByRole("cell", { name: "SMOKE001", exact: true })
     .first()
     .waitFor();
+  await page.getByRole("button", { name: "Add student", exact: true }).click();
   await page.getByLabel("Student / NCG ID", { exact: true }).fill("SMOKE001");
   await page.getByLabel("First name", { exact: true }).fill("Smoke");
   await page.getByLabel("Last name", { exact: true }).fill("Student");
   await page
-    .getByLabel("Subject", { exact: true })
+    .getByLabel("Programme", { exact: true })
     .selectOption("Computer Science");
   await page
     .getByRole("button", { name: "Add enrolment", exact: true })
