@@ -1,0 +1,4 @@
+Email,Student ID,Turnitin User ID,Similarity Score,Assessment,Attempt
+ada@example.edu,00123,TI1001,12,Essay,1
+ben@example.edu,00124,TI1002,27,Essay,1
+missing@example.edu,00999,TI1003,8,Essay,1

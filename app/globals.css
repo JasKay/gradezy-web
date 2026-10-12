@@ -1102,3 +1102,29 @@ body {
 .wf-marker-summary { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #52705c; }
 .wf-history-entry { border-top: 1px solid #dce5df; margin-top: 12px; padding-top: 12px; }
 .wf-history-entry p { margin: 6px 0; }
+
+/* SmartSync */
+.ss-panel { background: white; border: 1px solid #e0e7e4; border-radius: 14px; padding: 26px; margin-bottom: 24px; }
+.ss-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.ss-heading h2 { margin: 4px 0; color: #225c4b; font-size: 25px; }
+.ss-heading p, .ss-preview p { color: #677a70; }
+.ss-badge { background: #eaf2ec; color: #225c4b; border-radius: 20px; padding: 7px 12px; white-space: nowrap; font-size: 12px; }
+.ss-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.ss-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; }
+.ss-step { padding: 18px; background: #f7faf8; border: 1px solid #e2eae5; border-radius: 10px; }
+.ss-panel h3 { font-size: 15px; font-weight: 650; margin: 0 0 16px; }
+.ss-panel label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 12px; font-weight: 600; color: #496555; }
+.ss-panel input, .ss-panel select { background: white; border: 1px solid #cedbd3; border-radius: 7px; padding: 10px; min-width: 0; width: 100%; font-weight: 400; color: #172432; }
+.ss-panel input:focus, .ss-panel select:focus { outline: 2px solid #84a494; outline-offset: 2px; }
+.ss-step .wf-button { margin: 0 6px 12px 0; }
+.ss-note { color: #718279; font-size: 12px; line-height: 1.7; }
+.ss-test { background: #fff8e8; border: 1px solid #efdfb9; color: #755826; border-radius: 8px; padding: 16px; margin: 18px 0; }
+.ss-mapping { margin-top: 24px; }
+.ss-columns { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.ss-preview { border-top: 1px solid #e0e7e4; padding-top: 24px; }
+.ss-table { overflow: auto; max-height: 450px; margin: 16px 0; }
+.ss-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ss-table th, .ss-table td { padding: 12px; text-align: left; border-bottom: 1px solid #e0e7e4; }
+.ss-table th { background: #f2f6f3; }
+@media(max-width: 1000px) { .ss-grid { grid-template-columns: 1fr; } .ss-columns { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width: 600px) { .ss-heading { flex-direction: column; } .ss-columns { grid-template-columns: 1fr; } .ss-panel { padding: 16px; } }

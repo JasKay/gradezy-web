@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 import Link from "next/link";
+import { SmartSyncWorkspace } from "@/components/smartsync-workspace";
 import {
   Children,
   cloneElement,
@@ -335,7 +336,7 @@ export function WorkflowWorkspace({
             )}
             {view === "progress" && <ModuleTrackerWorkspace w={w} commit={commit} />}
             {view === "marking" && <ModuleTrackerWorkspace w={w} commit={commit} initialTab="marking" />}
-            {view === "sources" && <SourceRegister />}
+            {view === "sources" && <><SmartSyncWorkspace w={w} /><SourceRegister /></>}
             {view === "markers" && <Markers w={w} commit={commit} />}
             {view === "assessments" && (
               <SpreadsheetImport
