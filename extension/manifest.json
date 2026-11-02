@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Gradezy — Assessment Companion",
+  "version": "0.1.0",
+  "description": "Capture assessment records from authorised Moodle pages for local review.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Capture assessment records"
+  },
+  "icons": {}
+}
