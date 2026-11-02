@@ -101,7 +101,7 @@ export function TrackerSyncWorkspace() {
         <button onClick={()=>setActive("grades")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="grades"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>GradeCheck · Reconcile grades</button>
         <button onClick={()=>setActive("sharepoint")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="sharepoint"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>SharePoint · Live workbook</button>
       </nav>
-      {active==="sharepoint" ? <div className="rounded-2xl border border-slate-200 bg-white p-6"><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
+      {active==="sharepoint" ? <div className="gradezy-integration rounded-2xl border border-slate-200 bg-white p-6"><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
       <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and your SharePoint Progress Tracker workbook. Review suggested Turnitin ID updates before downloading.</p></div>
       <section className="grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
         <label className="space-y-2"><span className="block font-medium">1. Moodle Excel exports</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls,.csv" multiple onChange={e=>{setExports(Array.from(e.target.files||[]));setPreview(null);}}/><small className="text-slate-500">{exports.length} selected</small></label>
@@ -112,11 +112,11 @@ export function TrackerSyncWorkspace() {
       {preview && <section className="space-y-4 rounded-xl border bg-white p-6">
         <h2 className="text-xl font-semibold">Review results</h2>
         <div className="grid grid-cols-3 gap-3 text-center"><div><strong className="block text-2xl">{preview.matched}</strong>Matched</div><div><strong className="block text-2xl">{preview.changed}</strong>Updated</div><div><strong className="block text-2xl">{preview.issues.length}</strong>Exceptions</div></div>
-        <p className="text-sm text-slate-600">Existing conflicting IDs are never overwritten. This prototype matches by student ID only; confirm module, campus and attempt before using any output operationally.</p>
+        <p className="text-sm text-slate-600">Existing conflicting IDs are never overwritten. Matches use student ID. Confirm module, campus and attempt before applying any updates.</p>
         <button className="rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white" onClick={download}>Download reviewed tracker</button>
         {preview.issues.length>0 && <div><h3 className="font-semibold">Exceptions</h3><ul className="mt-2 max-h-72 space-y-1 overflow-auto text-sm">{preview.issues.map((x,i)=><li key={i}>Row {x.row}: {x.reason}</li>)}</ul></div>}
       </section>}
-      <p className="text-sm text-amber-800">Prototype: use anonymised sample data only. Multiple modules, campuses and attempts require scoped matching before production use.</p>
+      <p className="text-sm text-amber-800">Match results require review before use. Verify module, campus and attempt whenever a student appears in multiple records.</p>
     </section>}
     </div>
   </main>;
