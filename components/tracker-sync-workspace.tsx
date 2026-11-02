@@ -70,7 +70,7 @@ function makePreview(sources: {name: string; book: XLSX.WorkBook}[], tracker: XL
   return {workbook:tracker, matched, unchanged, changed, issues};
 }
 export function TrackerSyncWorkspace() {
-  const [active, setActive] = useState<"tracker"|"grades"|"sharepoint">("tracker");
+  const [active, setActive] = useState<"tracker"|"grades"|"review">("tracker");
   const [exports, setExports] = useState<File[]>([]);
   const [tracker, setTracker] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -93,16 +93,16 @@ export function TrackerSyncWorkspace() {
     <div className="mx-auto max-w-5xl space-y-7">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#225c4b] text-xl font-bold text-white">g</span><div><h1 className="text-2xl font-bold tracking-tight">Gradezy<span className="text-emerald-600">.</span></h1><p className="text-xs text-slate-500">Assessment automation workspace</p></div></div>
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">Files stay in your browser</span>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">Microsoft 365 · IT approval required</span>
       </header>
-      <div className="rounded-3xl bg-[#163d31] p-7 text-white sm:p-10"><p className="text-xs font-semibold uppercase tracking-[.2em] text-emerald-200">One workspace. Four tools.</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Get assessment work done.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-emerald-100/80">Moodle → Excel → SharePoint → StaffAdvantage. Upload, match, review and export without the repetitive spreadsheet work.</p></div>
+      <div className="rounded-3xl bg-[#163d31] p-7 text-white sm:p-10"><p className="text-xs font-semibold uppercase tracking-[.2em] text-emerald-200">ASSESSMENT OPERATIONS</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Your assessment workspace.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-emerald-100/80">Bring Moodle exports and grade records together, resolve exceptions, and prepare approved updates to your Progress Tracker.</p></div>
       <nav aria-label="Automation tools" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2">
-        <button onClick={()=>setActive("tracker")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="tracker"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Match IDs & tracker</button>
-        <button onClick={()=>setActive("grades")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="grades"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>GradeCheck · Reconcile grades</button>
-        <button onClick={()=>setActive("sharepoint")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="sharepoint"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>SharePoint · Live workbook</button>
+        <button onClick={()=>setActive("tracker")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="tracker"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Match IDs</button>
+        <button onClick={()=>setActive("grades")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="grades"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Reconcile grades</button>
+        <button onClick={()=>setActive("review")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="review"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Review & apply</button>
       </nav>
-      {active==="sharepoint" ? <div className="gradezy-integration rounded-2xl border border-slate-200 bg-white p-6"><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
-      <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and your SharePoint Progress Tracker workbook. Review suggested Turnitin ID updates before downloading.</p></div>
+      {active==="sharepoint" ? <div className="gradezy-integration rounded-2xl border border-slate-200 bg-white p-6"><div className="mb-6"><h2 className="text-2xl font-semibold tracking-tight">Review & apply</h2><p className="mt-2 text-sm text-slate-500">Connect your Microsoft 365 account, select the existing Progress Tracker, review proposed cell changes and apply approved updates in place.</p></div><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
+      <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and a copy of the Progress Tracker to validate student IDs and identify changes. Direct updates to SharePoint require your organisation’s Microsoft 365 approval.</p></div>
       <section className="grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
         <label className="space-y-2"><span className="block font-medium">1. Moodle Excel exports</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls,.csv" multiple onChange={e=>{setExports(Array.from(e.target.files||[]));setPreview(null);}}/><small className="text-slate-500">{exports.length} selected</small></label>
         <label className="space-y-2"><span className="block font-medium">2. Progress Tracker</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls" onChange={e=>{setTracker(e.target.files?.[0]||null);setPreview(null);}}/><small className="text-slate-500">{tracker?.name || "No file selected"}</small></label>
@@ -113,7 +113,7 @@ export function TrackerSyncWorkspace() {
         <h2 className="text-xl font-semibold">Review results</h2>
         <div className="grid grid-cols-3 gap-3 text-center"><div><strong className="block text-2xl">{preview.matched}</strong>Matched</div><div><strong className="block text-2xl">{preview.changed}</strong>Updated</div><div><strong className="block text-2xl">{preview.issues.length}</strong>Exceptions</div></div>
         <p className="text-sm text-slate-600">Existing conflicting IDs are never overwritten. Matches use student ID. Confirm module, campus and attempt before applying any updates.</p>
-        <button className="rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white" onClick={download}>Download reviewed tracker</button>
+        <button className="rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white" onClick={download}>Export reviewed workbook</button>
         {preview.issues.length>0 && <div><h3 className="font-semibold">Exceptions</h3><ul className="mt-2 max-h-72 space-y-1 overflow-auto text-sm">{preview.issues.map((x,i)=><li key={i}>Row {x.row}: {x.reason}</li>)}</ul></div>}
       </section>}
       <p className="text-sm text-amber-800">Match results require review before use. Verify module, campus and attempt whenever a student appears in multiple records.</p>
