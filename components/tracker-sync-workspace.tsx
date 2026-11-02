@@ -113,3 +113,26 @@ export function TrackerSyncWorkspace() {
           {active==="extension" ? <section className="overflow-hidden rounded-2xl border border-[#e5e9ec] bg-white"><div className="border-b border-[#edf0f2] px-7 py-6"><div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold tracking-tight">Gradezy for your browser</h2><span className="rounded-full bg-[#f4f5f6] px-3 py-1 text-[11px] font-semibold text-[#687684]">Not installed</span></div><p className="mt-2 max-w-xl text-sm leading-6 text-[#7b8995]">The extension will bring matching and reconciliation actions into authorised Moodle and StaffAdvantage pages. Browser permissions and institutional approval are required before enabling live capture or grade entry.</p></div><div className="grid gap-0 md:grid-cols-3">{[{n:"01",title:"Capture",body:"Read selected Moodle grade exports and identifiers."},{n:"02",title:"Reconcile",body:"Send selected records into Gradezy for review."},{n:"03",title:"Apply",body:"Prepare verified results for authorised entry into StaffAdvantage."}].map(x=><div key={x.n} className="border-b border-[#edf0f2] px-7 py-7 last:border-0 md:border-b-0 md:border-r"><span className="text-xs font-semibold text-[#3e876f]">{x.n}</span><h3 className="mt-3 text-sm font-semibold">{x.title}</h3><p className="mt-2 text-xs leading-5 text-[#82909b]">{x.body}</p></div>)}</div><p className="border-t border-[#edf0f2] px-7 py-5 text-xs text-[#7b8995]">Extension installation and direct browser integration are not available yet.</p></section> :
 
 
+      {active==="review" ? <div className="gradezy-integration rounded-2xl border border-slate-200 bg-white p-6"><div className="mb-6"><h2 className="text-2xl font-semibold tracking-tight">Review & apply</h2><p className="mt-2 text-sm text-slate-500">Connect your Microsoft 365 account, select the existing Progress Tracker, review proposed cell changes and apply approved updates in place.</p></div><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
+      <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and a copy of the Progress Tracker to validate student IDs and identify changes. Direct updates to SharePoint require your organisation’s Microsoft 365 approval.</p></div>
+      <section className="grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
+        <label className="space-y-2"><span className="block font-medium">1. Moodle Excel exports</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls,.csv" multiple onChange={e=>{setExports(Array.from(e.target.files||[]));setPreview(null);}}/><small className="text-slate-500">{exports.length} selected</small></label>
+        <label className="space-y-2"><span className="block font-medium">2. Progress Tracker</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls" onChange={e=>{setTracker(e.target.files?.[0]||null);setPreview(null);}}/><small className="text-slate-500">{tracker?.name || "No file selected"}</small></label>
+        <div className="md:col-span-2"><button className="rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-50" disabled={busy||!exports.length||!tracker} onClick={process}>{busy?"Processing…":"Preview matches"}</button></div>
+      </section>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
+      {preview && <section className="space-y-4 rounded-xl border bg-white p-6">
+        <h2 className="text-xl font-semibold">Review results</h2>
+        <div className="grid grid-cols-3 gap-3 text-center"><div><strong className="block text-2xl">{preview.matched}</strong>Matched</div><div><strong className="block text-2xl">{preview.changed}</strong>Updated</div><div><strong className="block text-2xl">{preview.issues.length}</strong>Exceptions</div></div>
+        <p className="text-sm text-slate-600">Existing conflicting IDs are never overwritten. Matches use student ID. Confirm module, campus and attempt before applying any updates.</p>
+        <button className="rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white" onClick={download}>Export reviewed workbook</button>
+        {preview.issues.length>0 && <div><h3 className="font-semibold">Exceptions</h3><ul className="mt-2 max-h-72 space-y-1 overflow-auto text-sm">{preview.issues.map((x,i)=><li key={i}>Row {x.row}: {x.reason}</li>)}</ul></div>}
+      </section>}
+      <p className="text-sm text-amber-800">Match results require review before use. Verify module, campus and attempt whenever a student appears in multiple records.</p>
+    </section>}
+          }
+        </div>
+      </div>
+    </div>
+  </main>;
+}
