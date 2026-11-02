@@ -22,7 +22,7 @@ function parseCsv(text: string): Result[] {
     return { email: v[0], studentId: v[1], userId: v[2], similarity: v[3], assessment: v[4], attempt: v[5] };
   });
 }
-export function SmartSyncWorkspace({ w }: { w: Workflow }) {
+export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
   const [profile, setProfile] = useState<Profile>(blank);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [status, setStatus] = useState({ configured: false, connected: false, automated: false });
@@ -46,8 +46,8 @@ export function SmartSyncWorkspace({ w }: { w: Workflow }) {
     setSheets(data.sheets); setSheet(data.sheet); setPreview(undefined);
     setMessage("Opened " + data.name + ". Select a worksheet and map its columns.");
   }
-  const modules = [...new Set(w.assessments.map(a => a.module).filter(Boolean))];
-  const assessments = w.assessments.filter(a => a.module === profile.module);
+  const modules = [...new Set((w?.assessments ?? []).map(a => a.module).filter(Boolean))];
+  const assessments = (w?.assessments ?? []).filter(a => a.module === profile.module);
   const valid = !!(sheet && results.length && profile.assessment && profile.attempt);
   return <section className="ss-panel" aria-labelledby="smartsync-title">
     <div className="ss-heading"><div><p className="wf-eyebrow">EXCEL GRADEBOOK INTEGRATION</p><h2 id="smartsync-title">SmartSync</h2><p>Match Turnitin records, review changes and update your existing Microsoft 365 gradebook.</p></div><span className="ss-badge">{testMode ? "Local matching test" : status.connected ? "Microsoft connected" : "Microsoft not connected"}</span></div>
