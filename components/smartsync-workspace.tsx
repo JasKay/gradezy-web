@@ -6,7 +6,6 @@ import type { Workflow } from "@/lib/workflow";
 type Profile = { id: string; module: string; assessment: string; attempt: string; link: string; sheet: string; mapping: Mapping };
 type Preview = Plan & { ticket?: string };
 const blank = (): Profile => ({ id: "", module: "", assessment: "", attempt: "1", link: "", sheet: "", mapping: { email: -1, studentId: -1, userId: -1, similarity: -1 } });
-const sample = "Email,Student ID,Turnitin User ID,Similarity Score,Assessment,Attempt\nada@example.edu,00123,TI1001,12,Essay,1\nben@example.edu,00124,TI1002,27,Essay,1\nmissing@example.edu,00999,TI1003,8,Essay,1";
 async function api(path: string, body?: unknown, method = "POST") {
   const res = await fetch("/api/smartsync/" + path, { method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const value = await res.json(); if (!res.ok) throw new Error(value.error || "Request failed."); return value;
@@ -22,7 +21,7 @@ function parseCsv(text: string): Result[] {
     return { email: v[0], studentId: v[1], userId: v[2], similarity: v[3], assessment: v[4], attempt: v[5] };
   });
 }
-export function SharePoint syncWorkspace({ w }: { w?: Workflow }) {
+export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
   const [profile, setProfile] = useState<Profile>(blank);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [status, setStatus] = useState({ configured: false, connected: false, automated: false });
@@ -73,14 +72,13 @@ export function SharePoint syncWorkspace({ w }: { w?: Workflow }) {
         <label>Submission attempt<input disabled={busy} type="number" min="1" value={profile.attempt} onChange={e => { change({ attempt: e.target.value }); setResults([]); }} /></label>
       </div>
       <div className="ss-step"><h3>2. Excel workbook</h3>
-        <label>SharePoint / OneDrive sharing link<input disabled={busy || testMode} type="url" value={profile.link} onChange={e => { change({ link: e.target.value, sheet: "" }); setSheet(undefined); setSheets([]); }} placeholder="https://yourinstitution.sharepoint.com/…" /></label>
+        <label>SharePoint / OneDrive sharing link<input disabled={busy} type="url" value={profile.link} onChange={e => { change({ link: e.target.value, sheet: "" }); setSheet(undefined); setSheets([]); }} placeholder="https://yourinstitution.sharepoint.com/…" /></label>
         <button className="wf-button" disabled={busy || !status.connected || !profile.link} onClick={() => run(() => loadBook())}>Open workbook</button>
         <label>Worksheet<select disabled={busy || !sheets.length} value={profile.sheet} onChange={e => { const id = e.target.value; change({ sheet: id || profile.sheet }); setSheet(undefined); if (id) run(() => loadBook(id)); }}><option value="">Select worksheet</option>{sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         <p className="ss-note">The first used row must contain column headers. Only approved mapped cells are updated; formulas are protected.</p>
       </div>
       <div className="ss-step"><h3>3. Turnitin results</h3>
         <label>Results CSV<input disabled={busy} type="file" accept=".csv,text/csv" onChange={e => { const file = e.target.files?.[0]; if (file) run(async () => { if (file.size > 5000000) throw new Error("CSV must be below 5 MB."); const parsed = parseCsv(await file.text()); if (parsed.length > 10000) throw new Error("CSV exceeds 10,000 records."); setResults(parsed); setPreview(undefined); setMessage(parsed.length + " source records loaded. Only the selected assessment and attempt will be used."); }); }} /></label>
-        <a className="wf-button" href="/samples/smartsync-turnitin.csv" download>Download sample CSV</a>
         <button className="wf-button" disabled={busy || !status.connected || !status.automated || !profile.module || !profile.assessment} onClick={() => run(async () => { const data = await api("results", profile); setResults(data.results); setPreview(undefined); setMessage("Retrieved " + data.results.length + " authorized Moodle records."); })}>Retrieve from Moodle / Turnitin</button>
         <p className="ss-note">{status.automated ? "Institution-authorized Moodle results service configured." : "Automatic retrieval requires an institution-authorized service exposing Turnitin User IDs and Similarity Scores. It is not connected."}</p>
       </div>
