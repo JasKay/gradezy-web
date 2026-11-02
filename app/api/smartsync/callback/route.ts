@@ -13,6 +13,6 @@ export async function GET(req: Request) {
     if (!res.ok || !auth.access_token) throw new Error("Microsoft rejected sign-in.");
     const seconds = Math.min(Number(auth.expires_in) || 3600, 3600);
     jar.set("gradezy_ms", seal({ access: auth.access_token, expires: Date.now() + seconds * 1000 - 60000 }), { ...cookieOptions, maxAge: seconds });
-    return Response.redirect(origin() + "/sources?smartsync=connected", 303);
-  } catch { jar.delete("gradezy_ms"); return Response.redirect(origin() + "/sources?smartsync=failed", 303); }
+    return Response.redirect(origin() + "/tools/tracker-sync?smartsync=connected", 303);
+  } catch { jar.delete("gradezy_ms"); return Response.redirect(origin() + "/tools/tracker-sync?smartsync=failed", 303); }
 }
