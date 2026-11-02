@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
+import { GradeCheckTool } from "./gradecheck-tool";
 import * as XLSX from "xlsx";
 
 type Cell = string | number | boolean | null | undefined;
@@ -69,6 +69,7 @@ function makePreview(sources: {name: string; book: XLSX.WorkBook}[], tracker: XL
   return {workbook:tracker, matched, unchanged, changed, issues};
 }
 export function TrackerSyncWorkspace() {
+  const [active, setActive] = useState<"tracker"|"grades">("tracker");
   const [exports, setExports] = useState<File[]>([]);
   const [tracker, setTracker] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -87,10 +88,19 @@ export function TrackerSyncWorkspace() {
     if (!preview) return;
     XLSX.writeFile(preview.workbook, "gradezy-progress-tracker-reviewed.xlsx");
   }
-  return <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
-    <div className="mx-auto max-w-4xl space-y-6">
-      <Link href="/dashboard" className="text-sm text-emerald-700">← Back to Gradezy</Link>
-      <header><p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">Assessment tools</p><h1 className="text-3xl font-semibold">Moodle → Progress Tracker</h1><p className="mt-2 text-slate-600">Upload Moodle exports and a tracker. Review changes before downloading. Files are processed in your browser.</p></header>
+  return <main className="min-h-screen bg-[#f5f7f6] p-5 text-[#172c26] sm:p-10">
+    <div className="mx-auto max-w-5xl space-y-7">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#225c4b] text-xl font-bold text-white">g</span><div><h1 className="text-2xl font-bold tracking-tight">Gradezy<span className="text-emerald-600">.</span></h1><p className="text-xs text-slate-500">Assessment automation workspace</p></div></div>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">Files stay in your browser</span>
+      </header>
+      <div className="rounded-3xl bg-[#163d31] p-7 text-white sm:p-10"><p className="text-xs font-semibold uppercase tracking-[.2em] text-emerald-200">One workspace. Four tools.</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Get assessment work done.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-emerald-100/80">Moodle → Excel → SharePoint → StaffAdvantage. Upload, match, review and export without the repetitive spreadsheet work.</p></div>
+      <nav aria-label="Automation tools" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2">
+        <button onClick={()=>setActive("tracker")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="tracker"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Match IDs & tracker</button>
+        <button onClick={()=>setActive("grades")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="grades"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>GradeCheck · Reconcile grades</button>
+      </nav>
+      {active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
+      <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and your SharePoint Progress Tracker workbook. Review suggested Turnitin ID updates before downloading.</p></div>
       <section className="grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
         <label className="space-y-2"><span className="block font-medium">1. Moodle Excel exports</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls,.csv" multiple onChange={e=>{setExports(Array.from(e.target.files||[]));setPreview(null);}}/><small className="text-slate-500">{exports.length} selected</small></label>
         <label className="space-y-2"><span className="block font-medium">2. Progress Tracker</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls" onChange={e=>{setTracker(e.target.files?.[0]||null);setPreview(null);}}/><small className="text-slate-500">{tracker?.name || "No file selected"}</small></label>
@@ -105,6 +115,7 @@ export function TrackerSyncWorkspace() {
         {preview.issues.length>0 && <div><h3 className="font-semibold">Exceptions</h3><ul className="mt-2 max-h-72 space-y-1 overflow-auto text-sm">{preview.issues.map((x,i)=><li key={i}>Row {x.row}: {x.reason}</li>)}</ul></div>}
       </section>}
       <p className="text-sm text-amber-800">Prototype: use anonymised sample data only. Multiple modules, campuses and attempts require scoped matching before production use.</p>
+    </section>}
     </div>
   </main>;
 }
