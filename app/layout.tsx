@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
-
 export const metadata: Metadata = {
-  title: "Gradezy — Assessment Operations Intelligence",
-  description:
-    "Gradezy connects cohort enrolments, assessment schedules, marker progress, reviewed grades and upload preparation.",
+  title: "Gradezy | Assessment automation",
+  description: "Reconcile Moodle exports with your Progress Tracker and prepare verified assessment records.",
 };
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body>{children}</body></html>;
 }
