@@ -22,7 +22,7 @@ function parseCsv(text: string): Result[] {
     return { email: v[0], studentId: v[1], userId: v[2], similarity: v[3], assessment: v[4], attempt: v[5] };
   });
 }
-export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
+export function SharePoint syncWorkspace({ w }: { w?: Workflow }) {
   const [profile, setProfile] = useState<Profile>(blank);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [status, setStatus] = useState({ configured: false, connected: false, automated: false });
@@ -33,7 +33,7 @@ export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [testMode, setTestMode] = useState(false);
+  
   useEffect(() => {
     try { setProfiles(JSON.parse(localStorage.getItem("gradezy_smartsync_profiles") || "[]")); } catch { setError("Saved SmartSync profiles could not be read."); }
     api("auth", undefined, "GET").then(setStatus).catch(e => setError(e.message));
@@ -50,17 +50,17 @@ export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
   const assessments = (w?.assessments ?? []).filter(a => a.module === profile.module);
   const valid = !!(sheet && results.length && profile.assessment && profile.attempt);
   return <section className="ss-panel" aria-labelledby="smartsync-title">
-    <div className="ss-heading"><div><p className="wf-eyebrow">EXCEL GRADEBOOK INTEGRATION</p><h2 id="smartsync-title">SmartSync</h2><p>Match Turnitin records, review changes and update your existing Microsoft 365 gradebook.</p></div><span className="ss-badge">{testMode ? "Local matching test" : status.connected ? "Microsoft connected" : "Microsoft not connected"}</span></div>
+    <div className="ss-heading"><div><p className="wf-eyebrow">MICROSOFT 365</p><h2 id="smartsync-title">SmartSync</h2><p>Match Turnitin records, review changes and update your existing Microsoft 365 gradebook.</p></div><span className="ss-badge">{status.connected ? "Microsoft connected" : "Microsoft not connected"}</span></div>
     {error && <div role="alert" className="wf-message error">{error}</div>}
     {message && <div role="status" className="wf-message success">{message}</div>}
     <div className="ss-actions"><button className="wf-button primary" disabled={busy || !status.configured} onClick={() => run(async () => { const data = await api("auth", {}); window.location.assign(data.url); })}>{status.connected ? "Reconnect Microsoft 365" : "Connect Microsoft 365"}</button>
     {status.connected && <button className="wf-button" disabled={busy} onClick={() => run(async () => { await api("auth", undefined, "DELETE"); setStatus(s => ({ ...s, connected: false })); setPreview(undefined); setSheet(undefined); })}>Disconnect</button>}
-    <button className="wf-button" disabled={busy} onClick={() => { setTestMode(v => !v); setSheet(undefined); setSheets([]); setResults([]); setPreview(undefined); setMessage(""); }}> {testMode ? "Use Microsoft workbook" : "Test with sample CSV"}</button></div>
-    {!status.configured && <p className="ss-note">Microsoft setup required: register Gradezy with your institution’s Microsoft tenant and configure the server environment. No workbook connection is active.</p>}
+</div>
+    {!status.configured && <p className="ss-note">Microsoft 365 connection is not configured. An administrator must configure the application registration and permissions before SharePoint editing can be enabled.</p>}
     <div className="ss-grid">
       <div className="ss-step"><h3>1. Module & assessment</h3>
         <label>Saved setup<select disabled={busy} value={profile.id} onChange={e => { setProfile(profiles.find(p => p.id === e.target.value) || blank()); setSheet(undefined); setResults([]); setSheets([]); setPreview(undefined); }}><option value="">New setup</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.module} · {p.assessment} · attempt {p.attempt}</option>)}</select></label>
-        {profile.id && <button className="wf-button primary" disabled={busy || testMode || !status.connected || !status.automated} onClick={() => run(async () => {
+        {profile.id && <button className="wf-button primary" disabled={busy || !status.connected || !status.automated} onClick={() => run(async () => {
           setPreview(undefined);
           await loadBook(profile.sheet);
           const data = await api("results", profile);
@@ -74,26 +74,26 @@ export function SmartSyncWorkspace({ w }: { w?: Workflow }) {
       </div>
       <div className="ss-step"><h3>2. Excel workbook</h3>
         <label>SharePoint / OneDrive sharing link<input disabled={busy || testMode} type="url" value={profile.link} onChange={e => { change({ link: e.target.value, sheet: "" }); setSheet(undefined); setSheets([]); }} placeholder="https://yourinstitution.sharepoint.com/…" /></label>
-        <button className="wf-button" disabled={busy || testMode || !status.connected || !profile.link} onClick={() => run(() => loadBook())}>Open workbook</button>
-        <label>Worksheet<select disabled={busy || testMode || !sheets.length} value={profile.sheet} onChange={e => { const id = e.target.value; change({ sheet: id || profile.sheet }); setSheet(undefined); if (id) run(() => loadBook(id)); }}><option value="">Select worksheet</option>{sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-        <p className="ss-note">The first used row must contain column headers. SmartSync writes only mapped output cells and blocks formula replacements.</p>
+        <button className="wf-button" disabled={busy || !status.connected || !profile.link} onClick={() => run(() => loadBook())}>Open workbook</button>
+        <label>Worksheet<select disabled={busy || !sheets.length} value={profile.sheet} onChange={e => { const id = e.target.value; change({ sheet: id || profile.sheet }); setSheet(undefined); if (id) run(() => loadBook(id)); }}><option value="">Select worksheet</option>{sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        <p className="ss-note">The first used row must contain column headers. Only approved mapped cells are updated; formulas are protected.</p>
       </div>
       <div className="ss-step"><h3>3. Turnitin results</h3>
         <label>Results CSV<input disabled={busy} type="file" accept=".csv,text/csv" onChange={e => { const file = e.target.files?.[0]; if (file) run(async () => { if (file.size > 5000000) throw new Error("CSV must be below 5 MB."); const parsed = parseCsv(await file.text()); if (parsed.length > 10000) throw new Error("CSV exceeds 10,000 records."); setResults(parsed); setPreview(undefined); setMessage(parsed.length + " source records loaded. Only the selected assessment and attempt will be used."); }); }} /></label>
         <a className="wf-button" href="/samples/smartsync-turnitin.csv" download>Download sample CSV</a>
-        <button className="wf-button" disabled={busy || testMode || !status.connected || !status.automated || !profile.module || !profile.assessment} onClick={() => run(async () => { const data = await api("results", profile); setResults(data.results); setPreview(undefined); setMessage("Retrieved " + data.results.length + " authorized Moodle records."); })}>Retrieve from Moodle / Turnitin</button>
+        <button className="wf-button" disabled={busy || !status.connected || !status.automated || !profile.module || !profile.assessment} onClick={() => run(async () => { const data = await api("results", profile); setResults(data.results); setPreview(undefined); setMessage("Retrieved " + data.results.length + " authorized Moodle records."); })}>Retrieve from Moodle / Turnitin</button>
         <p className="ss-note">{status.automated ? "Institution-authorized Moodle results service configured." : "Automatic retrieval requires an institution-authorized service exposing Turnitin User IDs and Similarity Scores. It is not connected."}</p>
       </div>
     </div>
-    {testMode && <div className="ss-test"><strong>Local test — no Microsoft workbook will be updated.</strong><p>Includes one missing student so you can inspect a flagged record.</p><button disabled={busy} className="wf-button" onClick={() => { setProfile({ ...blank(), module: "SAMPLE", assessment: "Essay", attempt: "1", mapping: { email: 0, studentId: 1, userId: 2, similarity: 3 } }); setResults(parseCsv(sample)); setSheet({ values: [["Email", "Student ID", "Turnitin User ID", "Similarity Score"], ["ada@example.edu", "00123", "", ""], ["ben@example.edu", "00124", "", ""]], formulas: [[], [], []], rowIndex: 0, columnIndex: 0 }); setPreview(undefined); }}>Load sample workbook & results</button></div>}
+    
     {sheet && <div className="ss-mapping"><h3>4. Column mapping</h3><div className="ss-grid ss-columns">{(["email", "studentId", "userId", "similarity"] as const).map(key => <label key={key}>{({ email: "Email (match)", studentId: "Student ID (match)", userId: "Turnitin User ID (write)", similarity: "Similarity score 0–100 (write)" })[key]}<select disabled={busy} value={profile.mapping[key]} onChange={e => change({ mapping: { ...profile.mapping, [key]: Number(e.target.value) } })}><option value={-1}>{key === "email" || key === "studentId" ? "Not used" : "Select output column"}</option>{sheet.values[0]?.map((header, i) => <option key={i} value={i}>{column(sheet.columnIndex + i)} · {String(header || "Unnamed")}</option>)}</select></label>)}</div></div>}
-    <div className="ss-actions"><button className="wf-button" disabled={busy || testMode || !profile.module || !profile.assessment || !profile.link || !profile.sheet || !sheet} onClick={() => { try { if (!sheet) return; planChanges(sheet, [{ email: "validation@example.edu", studentId: "", userId: "1", similarity: "0", assessment: profile.assessment, attempt: profile.attempt }], profile.mapping, profile.assessment, profile.attempt); const saved = { ...profile, id: profile.id || crypto.randomUUID() }; const next = [saved, ...profiles.filter(p => p.id !== saved.id)]; localStorage.setItem("gradezy_smartsync_profiles", JSON.stringify(next)); setProfiles(next); setProfile(saved); setMessage("Workbook link and mappings saved in this browser."); } catch(e) { setError(e instanceof Error ? e.message : "Could not save setup."); } }}>Save setup</button>
-    <button className="wf-button primary" disabled={busy || !valid || (!testMode && !status.connected)} onClick={() => run(async () => { setPreview(undefined); if (testMode && sheet) setPreview(planChanges(sheet, results, profile.mapping, profile.assessment, profile.attempt)); else setPreview(await api("preview", { ...profile, results })); })}>{busy ? "Working…" : "Preview changes"}</button></div>
+    <div className="ss-actions"><button className="wf-button" disabled={busy || !profile.module || !profile.assessment || !profile.link || !profile.sheet || !sheet} onClick={() => { try { if (!sheet) return; planChanges(sheet, [{ email: "validation@example.edu", studentId: "", userId: "1", similarity: "0", assessment: profile.assessment, attempt: profile.attempt }], profile.mapping, profile.assessment, profile.attempt); const saved = { ...profile, id: profile.id || crypto.randomUUID() }; const next = [saved, ...profiles.filter(p => p.id !== saved.id)]; localStorage.setItem("gradezy_smartsync_profiles", JSON.stringify(next)); setProfiles(next); setProfile(saved); setMessage("Workbook link and mappings saved in this browser."); } catch(e) { setError(e instanceof Error ? e.message : "Could not save setup."); } }}>Save setup</button>
+    <button className="wf-button primary" disabled={busy || !valid || !status.connected} onClick={() => run(async () => { setPreview(undefined); setPreview(await api("preview", { ...profile, results })); })}>{busy ? "Working…" : "Preview changes"}</button></div>
     {preview && <div className="ss-preview"><h3>Preview · {preview.changes.length} cell changes · {preview.issues.length} flagged records</h3><p>{preview.unchanged} cells already match. Similarity values are written as numbers from 0 to 100.</p>
       {preview.issues.length > 0 && <div role="alert" className="ss-test"><strong>Sync blocked. Resolve all flagged records and preview again.</strong><ul>{preview.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul></div>}
       <div className="ss-table"><table><thead><tr><th>Student</th><th>Cell</th><th>Current value</th><th>Proposed value</th></tr></thead><tbody>{preview.changes.map(c => <tr key={c.address}><td>{c.student}</td><td>{c.address}</td><td>{String(c.before || "—")}</td><td>{c.after}</td></tr>)}</tbody></table></div>
-      <button className="wf-button primary" disabled={busy || testMode || !preview.ticket || !preview.changes.length || !!preview.issues.length} onClick={() => run(async () => { const ticket = preview.ticket; setPreview(undefined); const data = await api("sync", { ticket }); setMessage("Microsoft confirmed " + data.completed + " cell updates. Reload the workbook to review."); setSheet(undefined); })}>Sync to Excel</button>
+      <button className="wf-button primary" disabled={busy || !preview.ticket || !preview.changes.length || !!preview.issues.length} onClick={() => run(async () => { const ticket = preview.ticket; setPreview(undefined); const data = await api("sync", { ticket }); setMessage("Microsoft confirmed " + data.completed + " cell updates. Reload the workbook to review."); setSheet(undefined); })}>Sync to Excel</button>
     </div>}
-    <p className="ss-note">Saved setups are local to this browser. Live sync requires a fresh preview. Resubmissions use a separate attempt and can have their own worksheet and output columns.</p>
+    <p className="ss-note">Saved setups are local to this browser. Each update requires a fresh preview. Resubmissions use a separate attempt and can have their own worksheet and output columns.</p>
   </section>;
 }
