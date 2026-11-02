@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { GradeCheckTool } from "./gradecheck-tool";
+import { SmartSyncWorkspace } from "./smartsync-workspace";
 import * as XLSX from "xlsx";
 
 type Cell = string | number | boolean | null | undefined;
@@ -69,7 +70,7 @@ function makePreview(sources: {name: string; book: XLSX.WorkBook}[], tracker: XL
   return {workbook:tracker, matched, unchanged, changed, issues};
 }
 export function TrackerSyncWorkspace() {
-  const [active, setActive] = useState<"tracker"|"grades">("tracker");
+  const [active, setActive] = useState<"tracker"|"grades"|"sharepoint">("tracker");
   const [exports, setExports] = useState<File[]>([]);
   const [tracker, setTracker] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -98,8 +99,9 @@ export function TrackerSyncWorkspace() {
       <nav aria-label="Automation tools" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2">
         <button onClick={()=>setActive("tracker")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="tracker"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>Match IDs & tracker</button>
         <button onClick={()=>setActive("grades")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="grades"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>GradeCheck · Reconcile grades</button>
+        <button onClick={()=>setActive("sharepoint")} className={`rounded-xl px-5 py-3 text-sm font-semibold transition ${active==="sharepoint"?"bg-[#225c4b] text-white":"text-slate-600 hover:bg-slate-100"}`}>SharePoint · Live workbook</button>
       </nav>
-      {active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
+      {active==="sharepoint" ? <div className="rounded-2xl border border-slate-200 bg-white p-6"><SmartSyncWorkspace /></div> : active==="grades" ? <GradeCheckTool/> : <section className="space-y-5">
       <div><h2 className="text-2xl font-semibold tracking-tight">Match IDs & update tracker</h2><p className="mt-2 text-sm text-slate-500">Upload Moodle exports and your SharePoint Progress Tracker workbook. Review suggested Turnitin ID updates before downloading.</p></div>
       <section className="grid gap-4 rounded-xl border bg-white p-6 md:grid-cols-2">
         <label className="space-y-2"><span className="block font-medium">1. Moodle Excel exports</span><input className="w-full text-sm" type="file" accept=".xlsx,.xls,.csv" multiple onChange={e=>{setExports(Array.from(e.target.files||[]));setPreview(null);}}/><small className="text-slate-500">{exports.length} selected</small></label>
