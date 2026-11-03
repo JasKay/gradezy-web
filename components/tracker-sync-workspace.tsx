@@ -53,12 +53,14 @@ function makePreview(sources: {name: string; book: XLSX.WorkBook}[], tracker: XL
   const firstPaper = header(h,["tiipaperid"]);
   const resubPaper = header(h,["resubmissiontiipaperid"]);
   if (email < 0 || firstPaper < 0) throw new Error("Tracker must contain ESL Email and TII Paper ID columns.");
+  const counts = new Map<string,number>();
+  rows.slice(1).forEach(row=>{const key=normalizeEmail(row[email]);if(key) counts.set(key,(counts.get(key)||0)+1);});
   const seen = new Set<string>();
   let matched=0,changed=0,unchanged=0;
   rows.slice(1).forEach((row,index)=>{
     const key = normalizeEmail(row[email]);
     if (!key) return;
-    if (seen.has(key)) {issues.push({row:index+2,reason:"Duplicate ESL Email in tracker: "+key});return;}
+    if ((counts.get(key)||0)>1) {issues.push({row:index+2,reason:"Duplicate ESL Email in tracker: "+key+"; no update."});seen.add(key);return;}
     seen.add(key);
     const submissions = records.get(key);
     if (!submissions?.length) return;
