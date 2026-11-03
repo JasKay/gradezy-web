@@ -152,7 +152,6 @@ export function TrackerSyncWorkspace() {
       </section>}
       <p className="text-sm text-amber-800">First-attempt Paper IDs only. Verify campus, module, assessment and attempt before using the reviewed workbook. Resubmissions are deliberately held for manual review.</p>
     </section>}
-          }
         </div>
       </div>
     </div>
