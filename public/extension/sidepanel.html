@@ -18,9 +18,10 @@ small,.hint{font-size:11px;color:#708477;line-height:1.45}.hidden,[hidden]{displ
 #status.error{color:#a5352c}.divider{height:1px;background:#e5ece6;margin:12px 0}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 ui-monospace,monospace;max-height:220px;overflow:auto;background:#f4f8f5;border:1px solid #e5ede8;padding:10px;border-radius:9px}
 a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
+.system-picker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:12px}.system-picker button{padding:13px 5px;background:#f0f6f2;color:#255942;border:1px solid #d4e4d9;font-size:11px}.system-picker button.selected{background:#1d6548;color:#fff}.system-picker span{display:block;font-size:18px;margin-bottom:6px}
 </style></head><body>
 <header><h1>gradezy<span>.</span></h1><p class="sub">Assessment workspace · stays open across tabs</p></header>
-<main class="workspace">
+<main class="workspace">\n<section class="card"><div class="kicker">Choose your workflow</div><div class="system-picker"><button type="button" id="chooseMoodle"><span>▤</span>Moodle</button><button type="button" id="chooseStaff"><span>✓</span>StaffAdvantage</button><button type="button" id="chooseTracker"><span>☷</span>SharePoint</button></div><p class="hint">Select a workflow, then open the corresponding browser page to use its live tools.</p></section>
 <section class="card"><div class="kicker">Current browser page</div><div id="siteLabel">Checking...</div><div id="pageTitle"></div><div class="chips"><span id="siteType" class="chip">Detecting</span><span id="accessStatus" class="chip">Local only</span></div><button id="refresh" class="secondary full">Refresh page detection</button></section>
 <section id="moodleSection" class="card" hidden><div class="kicker">Moodle · Capture</div><h2 style="margin-top:5px">Capture Turnitin submission records</h2><p>Try visible Moodle tables first. If Paper IDs are only available in an export, choose a CSV/TSV file.</p><label for="assessment">Assessment or module label (required)</label><input id="assessment" placeholder="e.g. BM4001 · Assessment 1" autocomplete="off">
 <label for="attempt">Submission attempt</label><select id="attempt"><option value="">Choose explicitly</option><option value="first">First attempt</option><option value="resub">Resubmission</option></select>
