@@ -164,12 +164,14 @@ function matchTracker(source, tables) {
   const updates = [], exceptions = [], messages = [];
   const candidates = tables.map(t => {
     const e = findIndex(t.headers, ["eslemail", "email", "studentemail"]);
+    // Never allow the first-attempt workflow to select a resubmission column.
+    const headers = t.headers.map(key);
     const paper = source.attempt === "resub"
-      ? findIndex(t.headers, ["resubmissiontiipaperid", "resubtiipaperid", "resubmissionpaperid"])
-      : findIndex(t.headers, ["tiipaperid", "turnitinpaperid", "paperid"]);
+      ? headers.findIndex(h => h.includes("resub") && h.includes("paperid"))
+      : headers.findIndex(h => !h.includes("resub") && h.includes("paperid"));
     const sim = source.attempt === "resub"
-      ? findIndex(t.headers, ["resubsimilarity", "resubmissionsimilarity"])
-      : findIndex(t.headers, ["similarity"]);
+      ? headers.findIndex(h => h.includes("resub") && h.includes("similarity"))
+      : headers.findIndex(h => !h.includes("resub") && h.includes("similarity"));
     return { t, e, paper, sim };
   }).filter(t => t.e >= 0 && t.paper >= 0);
   if (!candidates.length) throw Error("Cannot find a visible table with ESL Email and the selected attempt's Paper ID column. Use a Tracker CSV export.");
