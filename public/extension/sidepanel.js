@@ -317,3 +317,24 @@ chrome.tabs.onUpdated.addListener((_id, change, updated) => {
   if (updated.active && (change.url || change.status === "complete")) refreshTab().catch(e => status(e.message, true));
 });
 refreshTab().catch(e => status(e.message, true));
+
+/* User-selected workflow navigation. Site detection still controls access to live pages. */
+let gradezySelectedWorkflow = null;
+function gradezyShowWorkflow(which) {
+  gradezySelectedWorkflow = which;
+  for (const [id, value] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
+    $(id)?.classList.toggle("selected", value === which);
+  }
+  $("moodleSection").hidden = which !== "moodle";
+  $("trackerSection").hidden = which !== "tracker";
+  $("gradeSection").hidden = which !== "staff";
+  $("staffSection").hidden = which !== "staff";
+  $("otherSection").hidden = false;
+  $("otherSection").querySelector("h2").textContent = "Page connection";
+  $("otherSection").querySelector("p").textContent = system === which || (which === "tracker" && system === "excel") ? "This workflow matches your current browser page. Use the tools above." : "Open the matching " + ({moodle:"Moodle",staff:"StaffAdvantage",tracker:"SharePoint"}[which]) + " page in a browser tab to use the live page tools.";
+  if (system === which || (which === "tracker" && system === "excel")) $("otherSection").hidden = true;
+  status("Selected " + ({moodle:"Moodle · Download Scores",staff:"StaffAdvantage · Grade Fill",tracker:"SharePoint · Progress Tracker"}[which]) + ".");
+}
+for (const [id, systemName] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
+  $(id)?.addEventListener("click", () => gradezyShowWorkflow(systemName));
+}
