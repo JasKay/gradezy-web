@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gradezy workspace</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f6f9f7;color:#183b2f;font:13px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:19px 18px 14px;background:#fff;border-bottom:1px solid #dae5dd;position:sticky;top:0;z-index:2}h1{font-size:25px;letter-spacing:-1.5px;margin:0}h1 span{color:#349269}
+.sub{font-size:11px;color:#6a8175;margin:3px 0 0}.workspace{padding:15px 17px 22px}h2{font-size:14px;margin:0 0 7px}p{line-height:1.5;color:#536f61;margin:7px 0}
+.card{border:1px solid #dce6df;border-radius:13px;background:#fff;padding:14px;margin:0 0 12px}
+.kicker{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6c8577;font-weight:750}
+#siteLabel{font-size:17px;font-weight:720;margin:5px 0}#pageTitle{font-size:11px;color:#74867c;overflow-wrap:anywhere}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.chip{font-size:10px;color:#326a52;background:#e8f3ec;border-radius:20px;padding:5px 9px}
+button{cursor:pointer;background:#1d6548;color:white;border:0;padding:11px 12px;font:600 12px system-ui;border-radius:9px;text-align:center}
+button.secondary{background:#f4f7f5;color:#205a43;border:1px solid #cfded4}button:disabled{opacity:.45;cursor:not-allowed}
+button.full{width:100%;margin-top:8px}.row{display:flex;gap:8px}.row button{flex:1}
+label{display:block;margin:10px 0 4px;font-size:11px;font-weight:650}input,select{border:1px solid #cbdcd1;background:#fff;border-radius:8px;width:100%;padding:9px;font:12px system-ui}
+input[type=file]{padding:7px}input[type=checkbox]{width:auto;margin-right:6px}
+small,.hint{font-size:11px;color:#708477;line-height:1.45}.hidden,[hidden]{display:none!important}
+#status{white-space:pre-wrap;line-height:1.45;font-size:12px;min-height:16px;color:#235e42;margin:10px 0}
+#status.error{color:#a5352c}.divider{height:1px;background:#e5ece6;margin:12px 0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 ui-monospace,monospace;max-height:220px;overflow:auto;background:#f4f8f5;border:1px solid #e5ede8;padding:10px;border-radius:9px}
+a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
+</style></head><body>
+<header><h1>gradezy<span>.</span></h1><p class="sub">Assessment workspace · stays open across tabs</p></header>
+<main class="workspace">
+<section class="card"><div class="kicker">Current browser page</div><div id="siteLabel">Checking...</div><div id="pageTitle"></div><div class="chips"><span id="siteType" class="chip">Detecting</span><span id="accessStatus" class="chip">Local only</span></div><button id="refresh" class="secondary full">Refresh page detection</button></section>
+<section id="moodleSection" class="card" hidden><div class="kicker">Moodle · Capture</div><h2 style="margin-top:5px">Capture Turnitin submission records</h2><p>Try visible Moodle tables first. If Paper IDs are only available in an export, choose a CSV/TSV file.</p><label for="assessment">Assessment or module label (required)</label><input id="assessment" placeholder="e.g. BM4001 · Assessment 1" autocomplete="off">
+<label for="attempt">Submission attempt</label><select id="attempt"><option value="">Choose explicitly</option><option value="first">First attempt</option><option value="resub">Resubmission</option></select>
+<button id="captureMoodle" class="full">Capture visible Moodle table</button><label for="moodleFile">Or import Turnitin CSV/TSV</label><input id="moodleFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
+<button id="importMoodle" class="secondary full">Capture selected export</button></section>
+<section id="trackerSection" class="card" hidden><div class="kicker">SharePoint / Excel · Reconcile</div><h2 style="margin-top:5px">Preview Progress Tracker matches</h2><p>Gradezy checks ESL Email and the selected attempt's Paper ID column, and never replaces a conflicting existing value.</p>
+<label><input id="reviewedScope" type="checkbox">I verified module, assessment and attempt against the destination.</label>
+<button id="previewPage" class="full">Preview against visible tracker</button>
+<label for="trackerFile">Or choose Tracker CSV/TSV</label><input id="trackerFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
+<button id="previewCsv" class="secondary full">Preview against Tracker export</button><button id="downloadCsv" class="secondary full" hidden>Download reviewed CSV</button></section>
+<section id="staffSection" class="card" hidden><div class="kicker">StaffAdvantage · Read-only</div><h2 style="margin-top:5px">Read assessment table</h2><p>Uses the existing StaffAdvantage integration. This build reads records but does not enter or submit grades.</p><button id="readStaff" class="full">Read current student records</button></section>
+<section id="otherSection" class="card" hidden><h2>No supported workflow on this page</h2><p>Open a Moodle assessment, SharePoint Progress Tracker, Excel Online, or StaffAdvantage tab. Gradezy will switch tools automatically.</p></section>
+<section class="card"><div class="kicker">Session workspace</div><div id="savedSummary" style="margin-top:7px">No records captured.</div><div id="staffSummary" class="hint" style="margin-top:5px"></div><button id="clearData" class="secondary full">Clear saved assessment records</button></section>
+<section class="card"><h2>Preview and exceptions</h2><div id="status" role="status" aria-live="polite">Select a supported assessment page to begin.</div><pre id="preview" hidden></pre></section>
+</main><footer>Records remain in this browser's session storage. No automatic SharePoint, Excel or StaffAdvantage writes. Use only with your organisation's permission.</footer>
+<script src="sidepanel.js"></script></body></html>
