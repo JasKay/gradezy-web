@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 let tab = null;
 let system = "other";
 let exportRows = null;
+let pendingGradePreview = null;
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 const key = (v) => norm(v).replace(/[^a-z0-9]/g, "");
 const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -31,7 +32,7 @@ function detect(t) {
   return "other";
 }
 async function refreshSummary() {
-  const state = await chrome.storage.session.get(["gradezyMoodleRecords", "gradezyStaffSnapshot"]);
+  const state = await chrome.storage.session.get(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
   const s = state.gradezyMoodleRecords;
   $("savedSummary").textContent = s?.records?.length
     ? s.records.length + " Turnitin records · " + s.assessment + " · " + (s.attempt === "resub" ? "Resubmission" : "First attempt")
@@ -39,6 +40,9 @@ async function refreshSummary() {
   $("staffSummary").textContent = state.gradezyStaffSnapshot
     ? state.gradezyStaffSnapshot.count + " StaffAdvantage students read this session."
     : "";
+  $("gradeSummary").textContent = state.gradezyGradeData
+    ? state.gradezyGradeData.records.length + " grades staged · " + state.gradezyGradeData.assessment
+    : "No grade file staged.";
 }
 async function refreshTab() {
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -52,6 +56,9 @@ async function refreshTab() {
   $("moodleSection").hidden = system !== "moodle";
   $("trackerSection").hidden = system !== "tracker" && system !== "excel";
   $("staffSection").hidden = system !== "staff";
+  $("gradeSection").hidden = system !== "staff" && system !== "excel";
+  pendingGradePreview = null;
+  $("applyGrades").hidden = true;
   $("otherSection").hidden = system !== "other";
   await refreshSummary();
 }
@@ -237,6 +244,51 @@ async function action(work) {
   try { status("Working…"); await work(); }
   catch (error) { status(error?.message || String(error), true); }
 }
+
+async function stageGradeFile() {
+  const assessment = text($("staffScope").value);
+  if (!assessment) throw Error("Enter the module and assessment label first.");
+  const t = await fileTable("staffFile");
+  const idCol = findIndex(t.headers, ["ncgid", "ncgstudentid", "studentid"]);
+  const gradeCol = findIndex(t.headers, ["grade", "grades", "finalgrade", "finalmark", "percentage", "mark", "marks", "score"]);
+  if (idCol < 0 || gradeCol < 0) throw Error("Grade file needs NCG ID and Grade (or Percentage) columns.");
+  if (t.rows.length > 1000) throw Error("Maximum 1000 rows per reviewed grade batch.");
+  const records = t.rows.map(row => ({ ncgId: text(row[idCol]).replace(/\.0$/, ""), grade: text(row[gradeCol]) }));
+  if (!records.some(record => record.ncgId && record.grade)) throw Error("No valid NCG ID/Grade pairs found.");
+  await chrome.storage.session.set({gradezyGradeData:{assessment,records,savedAt:Date.now()}});
+  pendingGradePreview = null;
+  $("applyGrades").hidden = true;
+  status("Staged " + records.length + " grade rows locally. Open the appropriate StaffAdvantage assessment to preview exact NCG ID matches.");
+  await refreshSummary();
+}
+async function previewGradeFill() {
+  if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
+  if (!$("staffReview").checked) throw Error("Confirm the assessment and student list before previewing grades.");
+  const state = await chrome.storage.session.get("gradezyGradeData");
+  const batch = state.gradezyGradeData;
+  if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
+  if (text($("staffScope").value) !== batch.assessment) throw Error("The assessment label differs from the staged file. Set it to the same assessment.");
+  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records});
+  if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
+  const counts = result.data.summary;
+  pendingGradePreview = {token:result.data.token,tabId:tab.id};
+  const lines = ["StaffAdvantage grade preview", "Assessment: " + batch.assessment, "Ready to populate: " + counts.ready, "Already identical: " + counts.identical, "Conflicting existing grades: " + counts.conflict, "Missing NCG IDs: " + counts.missing, "Duplicate IDs: " + counts.duplicate, "Invalid grades/IDs: " + counts.invalid, "No editable grade field: " + counts.readonly, "", ...(result.data.exceptions || []).slice(0,20)];
+  setPreview(lines.join("\n"));
+  $("applyGrades").hidden = !counts.ready;
+  status("Review complete. Nothing has been changed. Populate only if the matches and assessment scope are correct.");
+}
+async function applyGradeFill() {
+  if (system !== "staff" || !tab?.id || tab.id !== pendingGradePreview?.tabId) throw Error("The preview is no longer valid.");
+  if (!$("staffReview").checked) throw Error("Reconfirm the assessment before populating.");
+  const result = await chrome.tabs.sendMessage(tab.id, {action:"applyStaffAdvantageFill",token:pendingGradePreview.token});
+  pendingGradePreview = null;
+  $("applyGrades").hidden = true;
+  if (!result?.success) throw Error(result?.error || "Could not populate grade fields.");
+  const counts = result.data;
+  setPreview("Grade population results\nFields populated: " + counts.populated + "\nSkipped: " + counts.skipped + "\nFailed: " + counts.failed + "\n\nReview the visible StaffAdvantage form carefully. Gradezy did not click Save or Submit. The website itself may autosave changes.");
+  status("Grade entry finished. Check the page before taking any final action.");
+}
+
 $("refresh").addEventListener("click", () => action(refreshTab));
 $("captureMoodle").addEventListener("click", () => action(async () => {
   if (system !== "moodle") throw Error("Open a Moodle tab.");
@@ -252,9 +304,12 @@ $("importMoodle").addEventListener("click", () => action(async () => {
 $("previewPage").addEventListener("click", () => action(() => previewTracker(false)));
 $("previewCsv").addEventListener("click", () => action(() => previewTracker(true)));
 $("readStaff").addEventListener("click", () => action(readStaff));
+$("stageGrades").addEventListener("click", () => action(stageGradeFile));
+$("previewGrades").addEventListener("click", () => action(previewGradeFill));
+$("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
-  await chrome.storage.session.remove(["gradezyMoodleRecords", "gradezyStaffSnapshot"]);
+  await chrome.storage.session.remove(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
   hidePreview(); await refreshSummary(); status("All saved assessment session data cleared.");
 }));
 chrome.tabs.onActivated.addListener(() => { refreshTab().catch(e => status(e.message, true)); });
