@@ -31,7 +31,16 @@ a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
 <button id="previewPage" class="full">Preview against visible tracker</button>
 <label for="trackerFile">Or choose Tracker CSV/TSV</label><input id="trackerFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
 <button id="previewCsv" class="secondary full">Preview against Tracker export</button><button id="downloadCsv" class="secondary full" hidden>Download reviewed CSV</button></section>
-<section id="staffSection" class="card" hidden><div class="kicker">StaffAdvantage · Read-only</div><h2 style="margin-top:5px">Read assessment table</h2><p>Uses the existing StaffAdvantage integration. This build reads records but does not enter or submit grades.</p><button id="readStaff" class="full">Read current student records</button></section>
+<section id="gradeSection" class="card" hidden><div class="kicker">Excel / StaffAdvantage · Grade Fill</div><h2 style="margin-top:5px">Prepare final grades by NCG ID</h2><p>Load a local CSV/TSV containing NCG ID and Grade columns. No data is sent to the Gradezy website.</p>
+<label for="staffScope">Module and assessment label</label><input id="staffScope" placeholder="e.g. BM4001 · Final grade">
+<label for="staffFile">Grade CSV/TSV (NCG ID + Grade)</label><input id="staffFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
+<button id="stageGrades" class="secondary full">Stage grades locally</button><div id="gradeSummary" class="hint" style="margin-top:8px"></div></section>
+<section id="staffSection" class="card" hidden><div class="kicker">StaffAdvantage · Reviewed grade entry</div><h2 style="margin-top:5px">Read and populate assessment fields</h2><p>Uses the existing StaffAdvantage table reader. Grade filling requires a separate preview and approval. Gradezy never clicks Save or Submit; the website may autosave changes.</p>
+<button id="readStaff" class="secondary full">Read current student records</button>
+<label><input id="staffReview" type="checkbox">I have checked the module, attempt, student list and proposed grades.</label>
+<button id="previewGrades" class="full">Preview NCG ID matches</button>
+<button id="applyGrades" class="full" hidden>Populate reviewed grade fields (no Save/Submit)</button></section>
+
 <section id="otherSection" class="card" hidden><h2>No supported workflow on this page</h2><p>Open a Moodle assessment, SharePoint Progress Tracker, Excel Online, or StaffAdvantage tab. Gradezy will switch tools automatically.</p></section>
 <section class="card"><div class="kicker">Session workspace</div><div id="savedSummary" style="margin-top:7px">No records captured.</div><div id="staffSummary" class="hint" style="margin-top:5px"></div><button id="clearData" class="secondary full">Clear saved assessment records</button></section>
 <section class="card"><h2>Preview and exceptions</h2><div id="status" role="status" aria-live="polite">Select a supported assessment page to begin.</div><pre id="preview" hidden></pre></section>
