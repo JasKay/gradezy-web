@@ -1,15 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "StaffAdvantage Grade Filler",
-  "version": "1.2.0",
-  "description": "Extract StaffAdvantage student records and grades directly into Gradezy.",
+  "name": "Gradezy — Assessment Companion",
+  "version": "1.3.0",
+  "description": "One local assessment workspace for Moodle, Excel, SharePoint and StaffAdvantage.",
   "permissions": [
     "scripting",
     "activeTab",
-    "storage"
+    "storage",
+    "tabs",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://staffadv.ncgrp.co.uk/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -19,23 +24,22 @@
       "matches": [
         "https://staffadv.ncgrp.co.uk/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Gradezy Assessment Assistant"
+    "default_title": "Open Gradezy workspace"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "externally_connectable": {
     "matches": [
       "https://gradezy-website.vercel.app/*",
       "http://localhost:3000/*"
     ]
-  },
-  "icons": {
-    "16": "icons/icon-16.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
   }
 }
