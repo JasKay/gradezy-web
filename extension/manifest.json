@@ -1,6 +1,23 @@
 {
- "manifest_version":3,"name":"Gradezy — Assessment Companion","version":"0.2.0",
- "description":"Save Turnitin exports locally and prepare verified Progress Tracker updates.",
- "permissions":["activeTab","scripting","storage","clipboardWrite"],
- "action":{"default_popup":"popup.html","default_title":"Gradezy assessment companion"}
+  "manifest_version": 3,
+  "name": "Gradezy — Assessment Companion",
+  "version": "0.3.0",
+  "description": "Unified assessment companion for Moodle, Excel, SharePoint and StaffAdvantage.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "clipboardWrite",
+    "sidePanel",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Gradezy workspace"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  }
 }
