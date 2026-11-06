@@ -131,7 +131,7 @@ function gradezyNameMatches(excelName, staffName) {
   // A visibly truncated label is acceptable only as a prefix after exact NCG ID match.
   return /\.{2,}|…/.test(staffName) ? displayed.length>=3 && expected.startsWith(displayed) : expected===displayed;
 }
-function gradezyBuildFillPlan(records, allowDefaultZero=false) {
+function gradezyBuildFillPlan(records, allowDefaultZero=false,attemptNumber="") {
   const table = findStaffAdvantageTable();
   if (!table) throw Error("StaffAdvantage assessment table is not visible.");
   const columns = columnMap(table);
@@ -139,6 +139,7 @@ function gradezyBuildFillPlan(records, allowDefaultZero=false) {
   const targetRows = new Map();
   for (const [index, row] of [...table.querySelectorAll("tbody tr")].entries()) {
     const cells = [...row.querySelectorAll(":scope > td")];
+    if(attemptNumber && cellValue(cells[columns.attempt])!==attemptNumber)continue;
     const id = parseStudentDetails(cellDetails(cells[columns.details]), row).ncgId;
     if (!id) continue;
     const existing = targetRows.get(id) || [];
@@ -186,11 +187,12 @@ function gradezyBuildFillPlan(records, allowDefaultZero=false) {
   outcome.ready = approved.length;
   return { outcome, approved, exceptions, details, page: location.href, title: document.title };
 }
-function gradezyPreviewFill(records,allowDefaultZero=false) {
+function gradezyPreviewFill(records,allowDefaultZero=false,attemptNumber="") {
   if (!Array.isArray(records) || !records.length || records.length > 1000) throw Error("Provide 1–1000 grade records.");
-  const plan = gradezyBuildFillPlan(records,allowDefaultZero);
+  if(!/^[1-9]\d*$/.test(attemptNumber))throw Error("Select the assessment attempt before matching.");
+  const plan = gradezyBuildFillPlan(records,allowDefaultZero,attemptNumber);
   const token = crypto.randomUUID();
-  gradezyPendingFill = { token, allowDefaultZero, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade),firstName:clean(r.firstName),lastName:clean(r.lastName) })), timestamp: Date.now(), page: plan.page, title: plan.title };
+  gradezyPendingFill = { token, allowDefaultZero,attemptNumber, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade),firstName:clean(r.firstName),lastName:clean(r.lastName) })), timestamp: Date.now(), page: plan.page, title: plan.title };
   return { token, summary: plan.outcome, exceptions: plan.exceptions, details:plan.details, count: records.length };
 }
 function gradezyApplyFill(token) {
@@ -198,8 +200,9 @@ function gradezyApplyFill(token) {
   if (Date.now() - gradezyPendingFill.timestamp > 5 * 60 * 1000 || location.href !== gradezyPendingFill.page || document.title !== gradezyPendingFill.title) throw Error("Page or preview changed. Preview again.");
   const records = gradezyPendingFill.source;
   const allowDefaultZero=gradezyPendingFill.allowDefaultZero;
+  const attemptNumber=gradezyPendingFill.attemptNumber;
   gradezyPendingFill = null; // one-time authorisation
-  const updatedPlan = gradezyBuildFillPlan(records,allowDefaultZero);
+  const updatedPlan = gradezyBuildFillPlan(records,allowDefaultZero,attemptNumber);
   const results = { populated: 0, skipped: records.length - updatedPlan.approved.length, failed: 0 };
   for (const rec of updatedPlan.approved) {
     try {
@@ -220,7 +223,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action !== "previewStaffAdvantageFill" && request.action !== "applyStaffAdvantageFill") return;
   try {
     const data = request.action === "previewStaffAdvantageFill"
-      ? gradezyPreviewFill(request.records,Boolean(request.allowDefaultZero))
+      ? gradezyPreviewFill(request.records,Boolean(request.allowDefaultZero),String(request.attemptNumber||""))
       : gradezyApplyFill(request.token);
     sendResponse({ success: true, data });
   } catch (error) {
