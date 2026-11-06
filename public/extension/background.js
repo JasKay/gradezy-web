@@ -15,10 +15,19 @@ function sendToStaffAdvantage(action) {
   }));
 }
 chrome.runtime.onMessageExternal.addListener((request, _sender, sendResponse) => {
-  if (request.action === "gradezyPing") { sendResponse({ success: true, data: { extension: "Gradezy", version: "1.2.0" } }); return; }
+  if (request.action === "gradezyPing") { sendResponse({ success: true, data: { extension: "Gradezy", version: "1.3.0" } }); return; }
   if (request.action === "readStaffAdvantageStudents" || request.action === "getStaffAdvantagePageInfo") { sendToStaffAdvantage(request.action).then(sendResponse); return true; }
   sendResponse({ success: false, error: "Unsupported Gradezy request." });
 });
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (["extractGrades", "extractStudents", "getPageInfo", "readStaffAdvantageStudents", "getStaffAdvantagePageInfo"].includes(request.action)) { sendToStaffAdvantage(request.action).then(sendResponse); return true; }
 });
+
+/* Keep the existing StaffAdvantage bridge intact and open the new unified workspace. */
+async function configureGradezyPanel() {
+  if (chrome.sidePanel?.setPanelBehavior) {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  }
+}
+chrome.runtime.onInstalled.addListener(configureGradezyPanel);
+chrome.runtime.onStartup.addListener(configureGradezyPanel);

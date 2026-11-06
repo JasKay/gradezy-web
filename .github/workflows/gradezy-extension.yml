@@ -1,0 +1,45 @@
+name: Build Gradezy browser extension
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/gradezy-unified-sidepanel
+    paths:
+      - 'public/extension/**'
+      - '.github/workflows/gradezy-extension.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate extension manifest and referenced files
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          root = pathlib.Path("public/extension")
+          manifest = json.loads((root / "manifest.json").read_text())
+          assert manifest["manifest_version"] == 3
+          assert manifest["version"]
+          required = [manifest["background"]["service_worker"], manifest["side_panel"]["default_path"]]
+          required += [js for item in manifest.get("content_scripts", []) for js in item.get("js", [])]
+          for path in required:
+              assert (root / path).is_file(), f"Missing extension file: {path}"
+          print("Manifest and referenced files verified.")
+          PY
+      - name: Validate JavaScript syntax
+        run: |
+          find public/extension -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+      - name: Package extension
+        run: |
+          cd public/extension
+          zip -qr ../../gradezy-extension.zip . -x '*.DS_Store'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gradezy-extension
+          path: gradezy-extension.zip
+          retention-days: 30

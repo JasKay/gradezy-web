@@ -86,3 +86,99 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   }
   if (request.action === "getStaffAdvantagePageInfo" || request.action === "getPageInfo") sendResponse({ success: true, data: getPageInfo() });
 });
+
+
+/* Reviewed grade-entry adapter. Exact NCG ID only, never clicks Save or Submit. */
+let gradezyPendingFill = null;
+function gradezyGrade(value) {
+  const raw = String(value ?? "").trim().replace(/%$/, "");
+  if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw)) return null;
+  const number = Number(raw);
+  return Number.isFinite(number) && number >= 0 && number <= 100 ? number.toFixed(2) : null;
+}
+function gradezyBuildFillPlan(records) {
+  const table = findStaffAdvantageTable();
+  if (!table) throw Error("StaffAdvantage assessment table is not visible.");
+  const columns = columnMap(table);
+  if (columns.details === undefined || columns.grade === undefined) throw Error("Could not identify student and percentage columns.");
+  const targetRows = new Map();
+  for (const [index, row] of [...table.querySelectorAll("tbody tr")].entries()) {
+    const cells = [...row.querySelectorAll(":scope > td")];
+    const id = parseStudentDetails(cellValue(cells[columns.details]), row).ncgId;
+    if (!id) continue;
+    const existing = targetRows.get(id) || [];
+    existing.push({ index, row, cells });
+    targetRows.set(id, existing);
+  }
+  const sourceCounts = new Map();
+  for (const rec of records) {
+    const id = normaliseId(rec.ncgId);
+    sourceCounts.set(id, (sourceCounts.get(id) || 0) + 1);
+  }
+  const outcome = { ready: 0, identical: 0, conflict: 0, missing: 0, duplicate: 0, invalid: 0, readonly: 0 };
+  const approved = [];
+  const exceptions = [];
+  for (const rec of records) {
+    const id = normaliseId(rec.ncgId), grade = gradezyGrade(rec.grade);
+    const matches = targetRows.get(id) || [];
+    let reason = "";
+    if (!id || grade === null) reason = "invalid";
+    else if (sourceCounts.get(id) !== 1 || matches.length > 1) reason = "duplicate";
+    else if (!matches.length) reason = "missing";
+    else {
+      const match = matches[0], cell = match.cells[columns.grade];
+      const input = cell?.querySelector("input[type='number'],input[type='text'],input:not([type]),textarea");
+      if (!input || input.disabled || input.readOnly) reason = "readonly";
+      else {
+        const existing = String(input.value ?? "").trim();
+        if (existing) reason = gradezyGrade(existing) === grade ? "identical" : "conflict";
+        else approved.push({ id, grade, row: match.row, input });
+      }
+    }
+    if (reason) {
+      outcome[reason]++;
+      if (exceptions.length < 25) exceptions.push("NCG ID " + id + ": " + reason);
+    }
+  }
+  outcome.ready = approved.length;
+  return { outcome, approved, exceptions, page: location.href, title: document.title };
+}
+function gradezyPreviewFill(records) {
+  if (!Array.isArray(records) || !records.length || records.length > 1000) throw Error("Provide 1–1000 grade records.");
+  const plan = gradezyBuildFillPlan(records);
+  const token = crypto.randomUUID();
+  gradezyPendingFill = { token, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade) })), timestamp: Date.now(), page: plan.page, title: plan.title };
+  return { token, summary: plan.outcome, exceptions: plan.exceptions, count: records.length };
+}
+function gradezyApplyFill(token) {
+  if (!gradezyPendingFill || gradezyPendingFill.token !== token) throw Error("Preview is missing or out of date. Preview again.");
+  if (Date.now() - gradezyPendingFill.timestamp > 5 * 60 * 1000 || location.href !== gradezyPendingFill.page || document.title !== gradezyPendingFill.title) throw Error("Page or preview changed. Preview again.");
+  const records = gradezyPendingFill.source;
+  gradezyPendingFill = null; // one-time authorisation
+  const updatedPlan = gradezyBuildFillPlan(records);
+  const results = { populated: 0, skipped: records.length - updatedPlan.approved.length, failed: 0 };
+  for (const rec of updatedPlan.approved) {
+    try {
+      if (!rec.input.isConnected || String(rec.input.value ?? "").trim()) { results.skipped++; continue; }
+      const setter = Object.getOwnPropertyDescriptor(rec.input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value")?.set;
+      if (setter) setter.call(rec.input, rec.grade);
+      else rec.input.value = rec.grade;
+      rec.input.dispatchEvent(new Event("input", { bubbles: true }));
+      rec.input.dispatchEvent(new Event("change", { bubbles: true }));
+      if (gradezyGrade(rec.input.value) === rec.grade) results.populated++;
+      else results.failed++;
+    } catch { results.failed++; }
+  }
+  return results;
+}
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action !== "previewStaffAdvantageFill" && request.action !== "applyStaffAdvantageFill") return;
+  try {
+    const data = request.action === "previewStaffAdvantageFill"
+      ? gradezyPreviewFill(request.records)
+      : gradezyApplyFill(request.token);
+    sendResponse({ success: true, data });
+  } catch (error) {
+    sendResponse({ success: false, error: String(error?.message || error) });
+  }
+});
