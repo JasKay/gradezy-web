@@ -45,9 +45,11 @@ function parseStudentDetails(value, row) {
   const ncgId = normaliseId(labelledId?.[1] || numericId || inlineId?.[0] || row.getAttribute("data-student-id") || row.dataset.studentId);
   const nameLine = lines.find((line) => line !== numericId && !/^(?:ncg\s*)?(?:id|number)\b/i.test(line) && !/^\d{6,12}$/.test(line)) || "";
   const commaName = nameLine.split(",").map(clean);
-  const nameParts = (commaName.length >= 2 ? `${commaName.slice(1).join(" ")} ${commaName[0]}` : nameLine)
-    .replace(/\b(?:ncg\s*)?(?:id|number)\b.*$/i, "").replace(/\b\d{6,12}\b/g, "").split(" ").filter(Boolean);
-  return { ncgId, firstName: nameParts.shift() || "", lastName: nameParts.join(" ") };
+  const stripIds = part => part.replace(/\b(?:ncg\s*)?(?:id|number)\b.*$/i, "").replace(/\b\d{6,12}\b/g, "").trim();
+  // StaffAdvantage renders "Adams, Chanelle..." then the NCG ID beneath it.
+  if (commaName.length >= 2) return {ncgId, firstName:stripIds(commaName.slice(1).join(" ")),lastName:stripIds(commaName[0])};
+  const nameParts=stripIds(nameLine).split(/\s+/).filter(Boolean);
+  return {ncgId,firstName:nameParts.shift()||"",lastName:nameParts.join(" ")};
 }
 function isChecked(cells, index) {
   const cell = cells[index];
@@ -122,7 +124,14 @@ function gradezyGrade(value) {
   return Number.isFinite(number) && number >= 0 && number <= 100 ? number.toFixed(2) : null;
 }
 function gradezyName(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
-function gradezyBuildFillPlan(records) {
+function gradezyNameMatches(excelName, staffName) {
+  if (!excelName) return true;
+  const expected=gradezyName(excelName), displayed=gradezyName(staffName);
+  if (!expected || !displayed) return false;
+  // A visibly truncated label is acceptable only as a prefix after exact NCG ID match.
+  return /\.{2,}|…/.test(staffName) ? displayed.length>=3 && expected.startsWith(displayed) : expected===displayed;
+}
+function gradezyBuildFillPlan(records, allowDefaultZero=false) {
   const table = findStaffAdvantageTable();
   if (!table) throw Error("StaffAdvantage assessment table is not visible.");
   const columns = columnMap(table);
@@ -141,7 +150,7 @@ function gradezyBuildFillPlan(records) {
     const id = normaliseId(rec.ncgId);
     sourceCounts.set(id, (sourceCounts.get(id) || 0) + 1);
   }
-  const outcome = { ready: 0, identical: 0, conflict: 0, missing: 0, duplicate: 0, invalid: 0, readonly: 0, nameMismatch: 0 };
+  const outcome = { ready: 0, readyZero: 0, zeroReview: 0, identical: 0, conflict: 0, missing: 0, duplicate: 0, invalid: 0, readonly: 0, nameMismatch: 0 };
   const approved = [];
   const exceptions = [];
   const details=[];
@@ -152,16 +161,20 @@ function gradezyBuildFillPlan(records) {
     if (!id || grade === null) reason = "invalid";
     else if (sourceCounts.get(id) !== 1 || matches.length > 1) reason = "duplicate";
     else if (!matches.length) reason = "missing";
-    else if ((rec.firstName && gradezyName(rec.firstName) !== gradezyName(matches[0].student.firstName)) ||
-             (rec.lastName && gradezyName(rec.lastName) !== gradezyName(matches[0].student.lastName))) reason="nameMismatch";
+    else if (!gradezyNameMatches(rec.firstName,matches[0].student.firstName) ||
+             !gradezyNameMatches(rec.lastName,matches[0].student.lastName)) reason="nameMismatch";
     else {
       const match = matches[0], cell = match.cells[columns.grade];
       const input = cell?.querySelector("input[type='number'],input[type='text'],input:not([type]),textarea");
       if (!input || input.disabled || input.readOnly) reason = "readonly";
       else {
         const existing = String(input.value ?? "").trim();
-        if (existing) reason = gradezyGrade(existing) === grade ? "identical" : "conflict";
-        else approved.push({ id, grade, row: match.row, input });
+        if (existing && gradezyGrade(existing) === grade) reason="identical";
+        else if (existing && gradezyGrade(existing)==="0.00") {
+          if (allowDefaultZero) { approved.push({id,grade,row:match.row,input,prior:"0.00"});outcome.readyZero++; }
+          else reason="zeroReview";
+        } else if (existing) reason="conflict";
+        else approved.push({ id, grade, row: match.row, input, prior:"" });
       }
     }
     if (reason) {
@@ -173,23 +186,25 @@ function gradezyBuildFillPlan(records) {
   outcome.ready = approved.length;
   return { outcome, approved, exceptions, details, page: location.href, title: document.title };
 }
-function gradezyPreviewFill(records) {
+function gradezyPreviewFill(records,allowDefaultZero=false) {
   if (!Array.isArray(records) || !records.length || records.length > 1000) throw Error("Provide 1–1000 grade records.");
-  const plan = gradezyBuildFillPlan(records);
+  const plan = gradezyBuildFillPlan(records,allowDefaultZero);
   const token = crypto.randomUUID();
-  gradezyPendingFill = { token, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade),firstName:clean(r.firstName),lastName:clean(r.lastName) })), timestamp: Date.now(), page: plan.page, title: plan.title };
+  gradezyPendingFill = { token, allowDefaultZero, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade),firstName:clean(r.firstName),lastName:clean(r.lastName) })), timestamp: Date.now(), page: plan.page, title: plan.title };
   return { token, summary: plan.outcome, exceptions: plan.exceptions, details:plan.details, count: records.length };
 }
 function gradezyApplyFill(token) {
   if (!gradezyPendingFill || gradezyPendingFill.token !== token) throw Error("Preview is missing or out of date. Preview again.");
   if (Date.now() - gradezyPendingFill.timestamp > 5 * 60 * 1000 || location.href !== gradezyPendingFill.page || document.title !== gradezyPendingFill.title) throw Error("Page or preview changed. Preview again.");
   const records = gradezyPendingFill.source;
+  const allowDefaultZero=gradezyPendingFill.allowDefaultZero;
   gradezyPendingFill = null; // one-time authorisation
-  const updatedPlan = gradezyBuildFillPlan(records);
+  const updatedPlan = gradezyBuildFillPlan(records,allowDefaultZero);
   const results = { populated: 0, skipped: records.length - updatedPlan.approved.length, failed: 0 };
   for (const rec of updatedPlan.approved) {
     try {
-      if (!rec.input.isConnected || String(rec.input.value ?? "").trim()) { results.skipped++; continue; }
+      const current=String(rec.input.value??"").trim();
+      if (!rec.input.isConnected || (rec.prior==="0.00" ? gradezyGrade(current)!=="0.00" : Boolean(current))) { results.skipped++; continue; }
       const setter = Object.getOwnPropertyDescriptor(rec.input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value")?.set;
       if (setter) setter.call(rec.input, rec.grade);
       else rec.input.value = rec.grade;
@@ -205,7 +220,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action !== "previewStaffAdvantageFill" && request.action !== "applyStaffAdvantageFill") return;
   try {
     const data = request.action === "previewStaffAdvantageFill"
-      ? gradezyPreviewFill(request.records)
+      ? gradezyPreviewFill(request.records,Boolean(request.allowDefaultZero))
       : gradezyApplyFill(request.token);
     sendResponse({ success: true, data });
   } catch (error) {
