@@ -12,10 +12,12 @@ export default function StaffAdvantagePreview(){
  function load(w:XLSX.WorkBook){setBook(w);setSheet(w.SheetNames[0]||"");setRows([]);setReviewed(false);setError("")}
  function inspect(){setError("");setReviewed(false);if(!book||!sheet)return setError("Choose a workbook and worksheet.");
  const grid=XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[sheet],{header:1,defval:"",raw:false});const h=(grid[0]||[]).map(clean);const find=(name:string)=>h.findIndex(v=>norm(v)===norm(name));
- const id=find("NCG ID"),first=find("First Name"),last=find("Last Name"),finals=h.map((v,i)=>norm(v)==="final grade"?i:-1).filter(i=>i>=0);
- if([id,first,last].some(i=>i<0)||!finals.length)return setError("Required headers missing: NCG ID, First Name, Last Name or Final Grade.");
- if(attempt==="resub"&&finals.length<2)return setError("This sheet does not have a second Final Grade column for resubmission.");
- const gradeCol=attempt==="first"?finals[0]:finals[1];const out:Row[]=[];
+ const id=find("NCG ID"),first=find("First Name"),last=find("Last Name");
+ const vle=h.map((v,i)=>norm(v).startsWith("vle check")?i:-1).filter(i=>i>=0);
+ const pairs=vle.map(v=>({vle:v,grade:h.findIndex((value,i)=>i===v-1&&norm(value)==="final grade") })).filter(p=>p.grade>=0);
+ if([id,first,last].some(i=>i<0)||!pairs.length)return setError("Required headers missing, or no Final Grade immediately before a VLE Check column. Please verify the worksheet layout.");
+ if(attempt==="resub"&&pairs.length<2)return setError("No resubmission Final Grade immediately before a second VLE Check column.");
+ const gradeCol=attempt==="first"?pairs[0].grade:pairs[1].grade;const out:Row[]=[];
  for(let i=1;i<grid.length;i++){const r=grid[i]||[];if(!clean(r[id])&&!clean(r[first])&&!clean(r[last]))continue;const grade=clean(r[gradeCol]);let status="Ready";const n=Number(grade.replace(/%$/,""));if(!clean(r[id])||!clean(r[first])||!clean(r[last]))status="Missing identity";else if(!grade)status="Missing grade";else if(!Number.isFinite(n)||n<0||n>100)status="Invalid grade";out.push({row:i+1,id:clean(r[id]),first:clean(r[first]),last:clean(r[last]),grade,status})}
  const counts=new Map<string,number>();for(const r of out)counts.set(norm(r.id),(counts.get(norm(r.id))||0)+1);
  for(const r of out)if((counts.get(norm(r.id))||0)>1)r.status="Duplicate NCG ID";
@@ -29,7 +31,7 @@ export default function StaffAdvantagePreview(){
  <label className="mt-7 block text-sm font-semibold">1. Upload gradebook</label><input className="mt-2 w-full text-xs" type="file" accept=".xlsx,.xls,.csv" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;try{load(XLSX.read(await f.arrayBuffer(),{type:"array"}))}catch{setError("Unable to read workbook.")}}}/>
  <button className="mt-3 w-full rounded-xl border border-[#c5d9cb] px-4 py-3 text-sm font-semibold" onClick={()=>load(example())}>Try a sample Excel workbook</button>
  <label className="mt-6 block text-sm font-semibold" htmlFor="sheet">2. Choose worksheet</label><select id="sheet" value={sheet} disabled={!book} onChange={e=>{setSheet(e.target.value);setReviewed(false)}} className="mt-2 w-full rounded-xl border border-[#cad9d0] bg-white p-3 text-sm"><option value="">Select worksheet</option>{book?.SheetNames.map(s=><option key={s}>{s}</option>)}</select>
- <label className="mt-6 block text-sm font-semibold" htmlFor="attempt">3. Select grade attempt</label><select id="attempt" value={attempt} onChange={e=>{setAttempt(e.target.value);setReviewed(false)}} className="mt-2 w-full rounded-xl border border-[#cad9d0] bg-white p-3 text-sm"><option value="first">First attempt · First Final Grade</option><option value="resub">Resubmission · Second Final Grade</option></select>
+ <label className="mt-6 block text-sm font-semibold" htmlFor="attempt">3. Select grade attempt</label><select id="attempt" value={attempt} onChange={e=>{setAttempt(e.target.value);setReviewed(false)}} className="mt-2 w-full rounded-xl border border-[#cad9d0] bg-white p-3 text-sm"><option value="first">First attempt · Final Grade before VLE Checks</option><option value="resub">Resubmission · Final Grade before resub VLE check</option></select>
  <button disabled={!book||!sheet} className="mt-7 w-full rounded-xl bg-[#1e6049] px-4 py-3 font-semibold text-white disabled:opacity-40" onClick={inspect}>Review grade matches</button>
  {error&&<p role="status" className="mt-4 rounded-lg bg-[#f1f5ef] p-3 text-sm">{error}</p>}
  <p className="mt-5 text-xs leading-5 text-[#6c8275]">Your workbook is processed in this browser page; this preview does not upload it to a server or write to StaffAdvantage. Use anonymised data unless your organisation authorises this tool.</p></section>
