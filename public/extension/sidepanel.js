@@ -422,19 +422,19 @@ async function stageGradeFile() {
 }
 async function previewGradeFill() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
-  if (!$("staffReview").checked) throw Error("Confirm the assessment and student list before previewing grades.");
   const state = await chrome.storage.session.get("gradezyGradeData");
   const batch = state.gradezyGradeData;
   if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
   if (text($("staffScope").value) !== batch.assessment) throw Error("The assessment label differs from the staged file. Set it to the same assessment.");
-  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records});
+  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked});
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
-  const lines = ["StaffAdvantage grade preview", "Assessment: " + batch.assessment, "Worksheet: " + (batch.worksheet||"Imported file"), "Ready to populate: " + counts.ready, "Already identical: " + counts.identical, "Conflicting existing grades: " + counts.conflict, "Missing NCG IDs: " + counts.missing, "Duplicate IDs: " + counts.duplicate, "Name mismatch: " + counts.nameMismatch, "Invalid grades/IDs: " + counts.invalid, "No editable grade field: " + counts.readonly, "", "ALL IMPORTED ROWS — NCG ID | Excel name | StaffAdvantage name | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
+  const lines = ["Matched: " + counts.ready, "0.00 values awaiting review: " + counts.zeroReview, "0.00 fields included with permission: " + counts.readyZero, "Already graded: " + counts.identical, "Conflicts: " + counts.conflict, "Not found: " + counts.missing, "Duplicates: " + counts.duplicate, "Name mismatches: " + counts.nameMismatch, "Invalid rows: " + counts.invalid, "Unavailable fields: " + counts.readonly, "", "NCG ID | Excel student | StaffAdvantage student | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
   setPreview(lines.join("\n"));
-  $("applyGrades").hidden = !counts.ready;
-  status("Review complete. Nothing has been changed. Populate only if the matches and assessment scope are correct.");
+  $("applyGrades").dataset.hasReady=counts.ready>0?"yes":"no";
+  $("applyGrades").hidden = !counts.ready || !$("staffReview").checked;
+  status("Matches ready. Check the results, then confirm before filling.");
 }
 async function applyGradeFill() {
   if (system !== "staff" || !tab?.id || tab.id !== pendingGradePreview?.tabId) throw Error("The preview is no longer valid.");
@@ -469,6 +469,8 @@ $("gradeHeaderRow").addEventListener("change",renderGradeColumns);
 for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLastColumn"])$(id).addEventListener("change",refreshGradePreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
+$("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
+$("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("applyGrades").hidden=true;status("0.00 setting changed. Review matches again.");});
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
@@ -486,6 +488,7 @@ refreshTab().catch(e => status(e.message, true));
 let gradezySelectedWorkflow = null;
 function gradezyShowWorkflow(which) {
   gradezySelectedWorkflow = which;
+  document.body.classList.toggle("grade-flow",which==="staff");
   for (const [id, value] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
     $(id)?.classList.toggle("selected", value === which);
   }
