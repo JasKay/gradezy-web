@@ -85,3 +85,19 @@ test("CSV parser supports quoted commas and rejects unclosed quotes", () => {
   assert.equal(rows[1][1], "123,456");
   assert.throws(()=>parser('"unclosed', ","), /Malformed CSV/);
 });
+
+test("grade import exposes sheet, header and column review before staging", () => {
+  const html = read("sidepanel.html");
+  for (const id of ["gradeSheet", "gradeHeaderRow", "gradeIdColumn", "gradeValueColumn", "gradeFirstColumn", "gradeLastColumn", "gradeFilePreview"]) {
+    assert.match(html, new RegExp('id="' + id + '"'));
+  }
+  assert.match(read("sidepanel.js"), /gradeWorkbook\.sheets/);
+  assert.match(read("sidepanel.js"), /rows\.slice\(0,1000\)/);
+});
+
+test("grade fill checks supplied student names and preserves them through approval", () => {
+  const src = read("content.js");
+  assert.match(src, /reason="nameMismatch"/);
+  assert.match(src, /firstName:clean\(r\.firstName\),lastName:clean\(r\.lastName\)/);
+  assert.match(src, /gradezyPendingFill = null; \/\/ one-time authorisation/);
+});
