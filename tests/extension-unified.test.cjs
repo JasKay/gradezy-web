@@ -101,3 +101,31 @@ test("grade fill checks supplied student names and preserves them through approv
   assert.match(src, /firstName:clean\(r\.firstName\),lastName:clean\(r\.lastName\)/);
   assert.match(src, /gradezyPendingFill = null; \/\/ one-time authorisation/);
 });
+
+test("StaffAdvantage surname-first rows retain the NCG ID beneath the name", () => {
+  const src=read("content.js");
+  const parser=isolated(src,"function parseStudentDetails(","function isChecked(","parseStudentDetails",
+    'const clean=v=>String(v??"").replace(/\\s+/g," ").trim();const normaliseId=v=>clean(v).replace(/\\s+/g,"");');
+  const row={getAttribute:()=>null,dataset:{}};
+  const student=parser("Adams, Chanelle...\n2341520",row);
+  assert.equal(student.ncgId,"2341520");
+  assert.equal(student.lastName,"Adams");
+  assert.equal(student.firstName,"Chanelle...");
+});
+
+test("truncated StaffAdvantage names are checked as prefixes after ID matching", () => {
+  const src=read("content.js");
+  const matches=isolated(src,"function gradezyName(","function gradezyBuildFillPlan(","gradezyNameMatches",
+    'const clean=v=>String(v??"").replace(/\\s+/g," ").trim();');
+  assert.equal(matches("Chanelle","Chanelle..."),true);
+  assert.equal(matches("Chanelle","Charlotte..."),false);
+  assert.equal(matches("Adams","Adams"),true);
+});
+
+test("0.00 replacement is separately reviewed and never assumed blank", () => {
+  const src=read("content.js");
+  assert.match(src,/allowDefaultZero=false/);
+  assert.match(src,/reason="zeroReview"/);
+  assert.match(src,/rec\.prior==="0\.00"/);
+  assert.match(read("sidepanel.html"),/id="staffZeroReview"/);
+});
