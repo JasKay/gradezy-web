@@ -1,5 +1,5 @@
 /* Gradezy local-only prototype: CSV exports, deterministic matching, no server or SharePoint writes. */
-const $=id=>document.getElementById(id);let output=null;
+const $=id=>document.getElementById(id);let output=null,staffOutput=null;
 function parse(text,delimiter){
  const rows=[];let row=[],field="",quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++}else quoted=!quoted}
@@ -14,8 +14,8 @@ const csv=rows=>rows.map(row=>row.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"
 async function readFile(input){const f=input.files[0];if(!f)throw Error("Choose a CSV export first.");const text=await f.text();const rows=parse(text.replace(/^\uFEFF/,""),f.name.toLowerCase().endsWith(".tsv")?"\t":",");if(rows.length<2)throw Error("No data rows in export.");return rows;}
 const status=s=>$("status").textContent=s;
 async function refresh(){const x=await chrome.storage.local.get("gradezyMoodle");$("saved").textContent=x.gradezyMoodle?x.gradezyMoodle.records.length+" saved Turnitin records ("+new Date(x.gradezyMoodle.savedAt).toLocaleString()+")":"No saved records yet."}
-function tab(which){const a=which==="moodle";$("moodlePanel").hidden=!a;$("trackerPanel").hidden=a;$("moodleTab").classList.toggle("selected",a);$("trackerTab").classList.toggle("selected",!a);status("")}
-$("moodleTab").onclick=()=>tab("moodle");$("trackerTab").onclick=()=>tab("tracker");
+function tab(which){for(const name of ["moodle","tracker","staff"]){$(name+"Panel").hidden=which!==name;$(name+"Tab").classList.toggle("selected",which===name)}status("")}
+$("moodleTab").onclick=()=>tab("moodle");$("trackerTab").onclick=()=>tab("tracker");$("staffTab").onclick=()=>tab("staff");
 $("save").onclick=async()=>{try{
  const rows=await readFile($("moodleFile")),h=rows[0],e=index(h,["email","emailaddress","studentemail"]),p=index(h,["paperid"]),s=index(h,["similarityscore"]);
  if(e<0||p<0)throw Error("Turnitin export must include Email and Paper ID columns.");
@@ -46,3 +46,26 @@ $("match").onclick=async()=>{try{
  }catch(e){status("Error: "+e.message)}};
 $("download").onclick=()=>{if(!output)return;const blob=new Blob(["\uFEFF"+csv(output)],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="gradezy-reviewed-tracker.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)};
 $("clear").onclick=async()=>{await chrome.storage.local.remove("gradezyMoodle");output=null;$("download").hidden=true;$("preview").hidden=true;status("Saved Moodle records cleared.");await refresh()};refresh();
+
+$("staffReview").onclick=async()=>{try{
+ staffOutput=null;$("staffExport").hidden=true;$("staffPreview").hidden=true;
+ const rows=await readFile($("staffFile")),headers=rows[0];
+ const ncg=index(headers,["ncgid"]),first=index(headers,["firstname"]),last=index(headers,["lastname"]);
+ const vle=headers.map((h,i)=>key(h).startsWith("vlecheck")?i:-1).filter(i=>i>=0);
+ const gradeCols=vle.map(i=>i-1).filter(i=>i>=0&&key(headers[i])==="finalgrade");
+ if([ncg,first,last].some(i=>i<0))throw Error("NCG ID, First Name and Last Name columns are required.");
+ const which=$("staffAttempt").value==="resub"?1:0;
+ if(gradeCols.length<=which)throw Error("No Final Grade immediately before the relevant VLE Check column. Check the selected worksheet.");
+ const gradeIndex=gradeCols[which],seen=new Map(),review=[];
+ for(let i=1;i<rows.length;i++){const r=rows[i],id=String(r[ncg]||"").trim();if(!id&&!r[first]&&!r[last])continue;if(id)seen.set(norm(id),(seen.get(norm(id))||0)+1)}
+ for(let i=1;i<rows.length;i++){const r=rows[i],id=String(r[ncg]||"").trim(),fn=String(r[first]||"").trim(),ln=String(r[last]||"").trim(),grade=String(r[gradeIndex]||"").trim();
+ if(!id&&!fn&&!ln)continue;
+ const value=Number(grade.replace(/%$/,""));
+ let issue=!id||!fn||!ln?"Missing student details":(seen.get(norm(id))||0)>1?"Duplicate NCG ID":!grade?"Missing Final Grade":!Number.isFinite(value)||value<0||value>100?"Invalid Final Grade":"Ready for portal matching";
+ review.push({id,fn,ln,grade,issue,row:i+1})}
+ staffOutput=review;$("staffPreview").hidden=false;
+ $("staffPreview").textContent="Worksheet: selected CSV | "+$("staffAttempt").selectedOptions[0].text+"\nGrade column: "+(gradeIndex+1)+" (immediately before VLE Check)\nReady for portal matching: "+review.filter(r=>r.issue==="Ready for portal matching").length+" / "+review.length+"\n\n"+review.slice(0,25).map(r=>r.id+" | "+r.fn+" "+r.ln+" | "+r.grade+" | "+r.issue).join("\n");
+ $("staffExport").hidden=false;status("Review only. StaffAdvantage has not been accessed or updated. Student name and NCG ID must be verified against the live portal before any Percentage entry.");
+ }catch(e){status("Error: "+e.message)}
+};
+$("staffExport").onclick=()=>{if(!staffOutput)return;const rows=[["NCG ID","First Name","Last Name","Final Grade","Review Status"],...staffOutput.map(r=>[r.id,r.fn,r.ln,r.grade,r.issue])];const blob=new Blob(["\uFEFF"+csv(rows)],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="gradezy-staffadvantage-review.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)};
