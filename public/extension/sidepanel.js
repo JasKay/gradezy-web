@@ -4,6 +4,7 @@ let tab = null;
 let system = "other";
 let exportRows = null;
 let pendingGradePreview = null;
+let gradeWorkbook = null;
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 const key = (v) => norm(v).replace(/[^a-z0-9]/g, "");
 const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -175,16 +176,21 @@ async function readXlsx(file) {
   const shared=stringsDoc?[...stringsDoc.getElementsByTagName("si")].map(si=>[...si.getElementsByTagName("t")].map(t=>t.textContent||"").join("")):[];
   const workbook=await xmlFile("xl/workbook.xml");
   const rels=await xmlFile("xl/_rels/workbook.xml.rels");
-  let sheetName="xl/worksheets/sheet1.xml";
+  let sheetNames=[{name:"Sheet 1",path:"xl/worksheets/sheet1.xml"}];
   if(workbook&&rels){
-    const sheet=workbook.getElementsByTagName("sheet")[0];
-    const id=sheet?.getAttribute("r:id");
-    const rel=[...rels.getElementsByTagName("Relationship")].find(r=>r.getAttribute("Id")===id);
-    const target=rel?.getAttribute("Target");
-    if(target)sheetName=target.startsWith("/")?target.slice(1):target.startsWith("xl/")?target:"xl/"+target.replace(/^\.\.\//,"");
+    sheetNames=[...workbook.getElementsByTagName("sheet")].map((sheet,i)=>{
+      const id=sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+      const rel=[...rels.getElementsByTagName("Relationship")].find(r=>r.getAttribute("Id")===id);
+      const target=rel?.getAttribute("Target") || `worksheets/sheet${i+1}.xml`;
+      const parts=(target.startsWith("/")?target.slice(1):target.startsWith("xl/")?target:"xl/"+target).split("/");
+      const safe=[];for(const part of parts){if(part==="..")safe.pop();else if(part!==".")safe.push(part);}
+      return {name:sheet.getAttribute("name")||`Sheet ${i+1}`,path:safe.join("/")};
+    });
   }
-  const sheet=await xmlFile(sheetName);
-  if(!sheet)throw Error("Could not find the first worksheet in this XLSX file.");
+  const sheets=[];
+  for(const spec of sheetNames){
+  const sheet=await xmlFile(spec.path);
+  if(!sheet)continue;
   if(sheet.getElementsByTagName("parsererror").length)throw Error("Invalid worksheet XML.");
   const rows=[];
   for(const row of sheet.getElementsByTagName("row")){
@@ -200,16 +206,22 @@ async function readXlsx(file) {
       values[col-1]=type==="s"?(shared[Number(v)]??""):type==="inlineStr"?(inline?.textContent||""):v;
     }
     if(values.some(v=>String(v??"").trim()))rows.push(Array.from({length:values.length},(_,i)=>values[i]??""));
-    if(rows.length>1002)throw Error("Workbook exceeds the 1000-grade-row limit.");
+    if(rows.length>10005)throw Error("Worksheet exceeds the 10000-row inspection limit.");
   }
-  if(rows.length<2)throw Error("No grade data found in the first worksheet.");
-  return {headers:rows[0],rows:rows.slice(1),allRows:rows};
+  sheets.push({name:spec.name,allRows:rows});
+  }
+  if(!sheets.some(s=>s.allRows.length>=2))throw Error("No data rows found in this workbook.");
+  return {sheets};
 }
 
 async function fileTable(inputId) {
   const file = $(inputId).files?.[0];
   if (!file) throw Error("Choose an Excel, CSV or TSV file first.");
-  if (/\.xlsx$/i.test(file.name)) return readXlsx(file);
+  if (/\.xlsx$/i.test(file.name)) {
+    const workbook=await readXlsx(file);
+    const first=workbook.sheets.find(s=>s.allRows.length>=2);
+    return {headers:first.allRows[0],rows:first.allRows.slice(1),allRows:first.allRows};
+  }
   if (!/\.(csv|tsv)$/i.test(file.name)) throw Error("Choose a .xlsx, .csv or .tsv file.");
   if (file.size > 15 * 1024 * 1024) throw Error("File is larger than the 15 MB local import limit.");
   const rows = parseDelimited(await file.text(), /\.tsv$/i.test(file.name) ? "\t" : ",");
@@ -327,6 +339,66 @@ async function readStaff() {
   status("Read " + students.length + " student records from the active StaffAdvantage page.");
   await refreshSummary();
 }
+function selectedGradeSheet() { return gradeWorkbook?.sheets[Number($("gradeSheet").value)]; }
+function selectedGradeRows(){const sheet=selectedGradeSheet();const index=Number($("gradeHeaderRow").value)||0;return {headers:sheet?.allRows[index]||[],rows:sheet?.allRows.slice(index+1)||[]};}
+function gradeHeaderIndex(headers, candidates) {
+  const values=headers.map(key);
+  for(const candidate of candidates){const index=values.indexOf(candidate);if(index>=0)return index;}
+  return -1;
+}
+function populateColumnSelect(id, headers, preferred) {
+  const select=$(id);select.replaceChildren();
+  const none=document.createElement("option");none.value="-1";none.textContent="Choose column";select.append(none);
+  headers.forEach((header,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=`${i+1}. ${text(header)||"Untitled"}`;select.append(option);});
+  select.value=String(gradeHeaderIndex(headers,preferred));
+}
+function renderGradeFile() {
+  const sheet=selectedGradeSheet(); if(!sheet)return;
+  const headerSelect=$("gradeHeaderRow");headerSelect.replaceChildren();
+  sheet.allRows.slice(0,20).forEach((row,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=`Row ${i+1}: ${row.slice(0,3).map(text).join(" · ").slice(0,70)}`;headerSelect.append(option);});
+  const best=sheet.allRows.slice(0,20).findIndex(row=>gradeHeaderIndex(row,["ncgid","ncgstudentid","studentid","studentnumber"])>=0);
+  headerSelect.value=String(best>=0?best:0);
+  renderGradeColumns();
+}
+function renderGradeColumns(){
+  const headers=selectedGradeRows().headers;
+  populateColumnSelect("gradeIdColumn",headers,["ncgid","ncgstudentid","studentid","studentnumber","ncgnumber"]);
+  populateColumnSelect("gradeValueColumn",headers,["finalgrade","grade","grades","finalmark","percentage","mark","score"]);
+  populateColumnSelect("gradeFirstColumn",headers,["firstname","forename","givenname"]);
+  populateColumnSelect("gradeLastColumn",headers,["lastname","surname","familyname"]);
+  refreshGradePreview();
+}
+function refreshGradePreview() {
+  const sheet=selectedGradeSheet();if(!sheet)return;
+  const {headers,rows}=selectedGradeRows();
+  const indices=["gradeIdColumn","gradeFirstColumn","gradeLastColumn","gradeValueColumn"].map(id=>Number($(id).value));
+  $("gradeFileInfo").textContent=`${sheet.name} · ${rows.length} rows · ${headers.length} columns. Showing ${Math.min(1000,rows.length)} rows. Choose the matching columns before staging.`;
+  const wrapper=$("gradeFilePreview");wrapper.replaceChildren();
+  const table=document.createElement("table"),head=document.createElement("tr");
+  ["NCG ID","First name","Last name","Grade"].forEach(label=>{const th=document.createElement("th");th.textContent=label;head.append(th);});
+  const thead=document.createElement("thead");thead.append(head);table.append(thead);
+  const body=document.createElement("tbody");
+  rows.slice(0,1000).forEach(row=>{const tr=document.createElement("tr");indices.forEach(i=>{const td=document.createElement("td");td.textContent=i>=0?text(row[i]):"—";tr.append(td);});body.append(tr);});
+  table.append(body);wrapper.append(table);
+  $("stageGrades").disabled=indices[0]<0||indices[3]<0||indices[0]===indices[3]||rows.length===0||rows.length>1000;
+}
+async function inspectGradeFile() {
+  const file=$("staffFile").files?.[0];
+  gradeWorkbook=null;$("gradeImportOptions").hidden=true;$("stageGrades").disabled=true;
+  if(!file)return;
+  if(file.size>15*1024*1024)throw Error("File is larger than the 15 MB local import limit.");
+  if(/\.xlsx$/i.test(file.name))gradeWorkbook=await readXlsx(file);
+  else if(/\.(csv|tsv)$/i.test(file.name)){
+    const rows=parseDelimited(await file.text(),/\.tsv$/i.test(file.name)?"\t":",");
+    gradeWorkbook={sheets:[{name:"Imported file",allRows:rows}]};
+  }else throw Error("Choose an Excel .xlsx, CSV or TSV file.");
+  const select=$("gradeSheet");select.replaceChildren();
+  gradeWorkbook.sheets.forEach((sheet,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=`${sheet.name} (${Math.max(0,sheet.allRows.length-1)} rows)`;select.append(option);});
+  const best=gradeWorkbook.sheets.findIndex(s=>gradeHeaderIndex(s.allRows[0]||[],["ncgid","ncgstudentid","studentid","studentnumber"])>=0);
+  select.value=String(best>=0?best:0);
+  $("gradeImportOptions").hidden=false;renderGradeFile();
+  status(`Loaded ${file.name}. Review the worksheet and column mapping, then confirm to stage grades.`);
+}
 async function action(work) {
   try { status("Working…"); await work(); }
   catch (error) { status(error?.message || String(error), true); }
@@ -335,17 +407,17 @@ async function action(work) {
 async function stageGradeFile() {
   const assessment = text($("staffScope").value);
   if (!assessment) throw Error("Enter the module and assessment label first.");
-  const t = await fileTable("staffFile");
-  const idCol = findIndex(t.headers, ["ncgid", "ncgstudentid", "studentid", "studentnumber", "ncgnumber"]);
-  const gradeCol = findIndex(t.headers, ["grade", "grades", "finalgrade", "finalmark", "percentage", "mark", "marks", "score"]);
-  if (idCol < 0 || gradeCol < 0) throw Error("Grade file needs NCG ID and Grade (or Percentage) columns.");
-  if (t.rows.length > 1000) throw Error("Maximum 1000 rows per reviewed grade batch.");
-  const records = t.rows.map(row => ({ ncgId: text(row[idCol]).replace(/\.0$/, ""), grade: text(row[gradeCol]) }));
+  const sheet=selectedGradeSheet();if(!sheet)throw Error("Choose and inspect an Excel/CSV file first.");
+  const [idCol,firstCol,lastCol,gradeCol]=["gradeIdColumn","gradeFirstColumn","gradeLastColumn","gradeValueColumn"].map(id=>Number($(id).value));
+  if(idCol<0||gradeCol<0||idCol===gradeCol)throw Error("Select distinct NCG ID and Grade columns.");
+  const rows=selectedGradeRows().rows;
+  if(rows.length>1000)throw Error("Maximum 1000 grade rows per reviewed batch.");
+  const records=rows.map(row=>({ncgId:text(row[idCol]).replace(/\.0$/, ""),grade:text(row[gradeCol]),firstName:firstCol>=0?text(row[firstCol]):"",lastName:lastCol>=0?text(row[lastCol]):""}));
   if (!records.some(record => record.ncgId && record.grade)) throw Error("No valid NCG ID/Grade pairs found.");
-  await chrome.storage.session.set({gradezyGradeData:{assessment,records,savedAt:Date.now()}});
+  await chrome.storage.session.set({gradezyGradeData:{assessment,worksheet:sheet.name,records,savedAt:Date.now()}});
   pendingGradePreview = null;
   $("applyGrades").hidden = true;
-  status("Staged " + records.length + " grade rows locally. Open the appropriate StaffAdvantage assessment to preview exact NCG ID matches.");
+  status(`Staged ${records.length} rows from ${sheet.name}. Open the correct StaffAdvantage assessment to compare NCG IDs and student names.`);
   await refreshSummary();
 }
 async function previewGradeFill() {
@@ -359,7 +431,7 @@ async function previewGradeFill() {
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
-  const lines = ["StaffAdvantage grade preview", "Assessment: " + batch.assessment, "Ready to populate: " + counts.ready, "Already identical: " + counts.identical, "Conflicting existing grades: " + counts.conflict, "Missing NCG IDs: " + counts.missing, "Duplicate IDs: " + counts.duplicate, "Invalid grades/IDs: " + counts.invalid, "No editable grade field: " + counts.readonly, "", ...(result.data.exceptions || []).slice(0,20)];
+  const lines = ["StaffAdvantage grade preview", "Assessment: " + batch.assessment, "Worksheet: " + (batch.worksheet||"Imported file"), "Ready to populate: " + counts.ready, "Already identical: " + counts.identical, "Conflicting existing grades: " + counts.conflict, "Missing NCG IDs: " + counts.missing, "Duplicate IDs: " + counts.duplicate, "Name mismatch: " + counts.nameMismatch, "Invalid grades/IDs: " + counts.invalid, "No editable grade field: " + counts.readonly, "", "ALL IMPORTED ROWS — NCG ID | Excel name | StaffAdvantage name | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
   setPreview(lines.join("\n"));
   $("applyGrades").hidden = !counts.ready;
   status("Review complete. Nothing has been changed. Populate only if the matches and assessment scope are correct.");
@@ -391,12 +463,17 @@ $("importMoodle").addEventListener("click", () => action(async () => {
 $("previewPage").addEventListener("click", () => action(() => previewTracker(false)));
 $("previewCsv").addEventListener("click", () => action(() => previewTracker(true)));
 $("readStaff").addEventListener("click", () => action(readStaff));
+$("staffFile").addEventListener("change", () => action(inspectGradeFile));
+$("gradeSheet").addEventListener("change", renderGradeFile);
+$("gradeHeaderRow").addEventListener("change",renderGradeColumns);
+for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLastColumn"])$(id).addEventListener("change",refreshGradePreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
   await chrome.storage.session.remove(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
+  gradeWorkbook=null;$("staffFile").value="";$("gradeImportOptions").hidden=true;$("stageGrades").disabled=true;
   hidePreview(); await refreshSummary(); status("All saved assessment session data cleared.");
 }));
 chrome.tabs.onActivated.addListener(() => { refreshTab().catch(e => status(e.message, true)); });
