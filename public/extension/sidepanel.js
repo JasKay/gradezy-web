@@ -5,6 +5,18 @@ let system = "other";
 let exportRows = null;
 let pendingGradePreview = null;
 let gradeWorkbook = null;
+let gradeFlowStep = "upload";
+let gradezySelectedWorkflow = null;
+function setGradeStep(step) {
+  gradeFlowStep = step;
+  const active = gradezySelectedWorkflow === "staff";
+  $("gradeFlowSteps").hidden = !active;
+  $("gradeSection").hidden = !active || step !== "upload";
+  $("staffSection").hidden = !active || step === "upload";
+  $("staffMatchPane").hidden = step !== "match";
+  $("staffLivePane").hidden = step !== "live";
+  for (const name of ["Upload", "Match", "Live"]) $("step" + name).classList.toggle("active", name.toLowerCase() === step);
+}
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 const key = (v) => norm(v).replace(/[^a-z0-9]/g, "");
 const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
@@ -61,6 +73,7 @@ async function refreshTab() {
   pendingGradePreview = null;
   $("applyGrades").hidden = true;
   $("otherSection").hidden = system !== "other";
+  if (gradezySelectedWorkflow) gradezyShowWorkflow(gradezySelectedWorkflow, true);
   await refreshSummary();
 }
 async function requestSiteAccess() {
@@ -333,11 +346,12 @@ async function readStaff() {
     ].join("\n"));
     status("No students found. See the diagnostic details below.", true);
     await refreshSummary();
-    return;
+    return 0;
   }
   setPreview("StaffAdvantage assessment table\nStudents detected: " + students.length + "\nRead-only extraction completed.\nNo grades were entered or submitted.");
   status("Read " + students.length + " student records from the active StaffAdvantage page.");
   await refreshSummary();
+  return students.length;
 }
 function selectedGradeSheet() { return gradeWorkbook?.sheets[Number($("gradeSheet").value)]; }
 function selectedGradeRows(){const sheet=selectedGradeSheet();const index=Number($("gradeHeaderRow").value)||0;return {headers:sheet?.allRows[index]||[],rows:sheet?.allRows.slice(index+1)||[]};}
@@ -372,13 +386,14 @@ function refreshGradePreview() {
   const sheet=selectedGradeSheet();if(!sheet)return;
   const {headers,rows}=selectedGradeRows();
   const indices=["gradeIdColumn","gradeFirstColumn","gradeLastColumn","gradeValueColumn"].map(id=>Number($(id).value));
-  $("gradeFileInfo").textContent=`${sheet.name} · ${rows.length} rows · ${headers.length} columns. Showing ${Math.min(1000,rows.length)} rows. Choose the matching columns before staging.`;
+  const eligible=rows.filter(row=>indices[0]>=0&&indices[3]>=0&&text(row[indices[0]])&&text(row[indices[3]])).length;
+  $("gradeFileInfo").textContent=`${rows.length} students · ${eligible} grades`;
   const wrapper=$("gradeFilePreview");wrapper.replaceChildren();
   const table=document.createElement("table"),head=document.createElement("tr");
   ["NCG ID","First name","Last name","Grade"].forEach(label=>{const th=document.createElement("th");th.textContent=label;head.append(th);});
   const thead=document.createElement("thead");thead.append(head);table.append(thead);
   const body=document.createElement("tbody");
-  rows.slice(0,1000).forEach(row=>{const tr=document.createElement("tr");indices.forEach(i=>{const td=document.createElement("td");td.textContent=i>=0?text(row[i]):"—";tr.append(td);});body.append(tr);});
+  rows.slice(0,30).forEach(row=>{const tr=document.createElement("tr");indices.forEach(i=>{const td=document.createElement("td");td.textContent=i>=0?text(row[i]):"—";tr.append(td);});body.append(tr);});
   table.append(body);wrapper.append(table);
   $("stageGrades").disabled=indices[0]<0||indices[3]<0||indices[0]===indices[3]||rows.length===0||rows.length>1000;
 }
@@ -397,7 +412,7 @@ async function inspectGradeFile() {
   const best=gradeWorkbook.sheets.findIndex(s=>gradeHeaderIndex(s.allRows[0]||[],["ncgid","ncgstudentid","studentid","studentnumber"])>=0);
   select.value=String(best>=0?best:0);
   $("gradeImportOptions").hidden=false;renderGradeFile();
-  status(`Loaded ${file.name}. Review the worksheet and column mapping, then confirm to stage grades.`);
+  status("");
 }
 async function action(work) {
   try { status("Working…"); await work(); }
@@ -405,19 +420,20 @@ async function action(work) {
 }
 
 async function stageGradeFile() {
-  const assessment = text($("staffScope").value);
-  if (!assessment) throw Error("Enter the module and assessment label first.");
   const sheet=selectedGradeSheet();if(!sheet)throw Error("Choose and inspect an Excel/CSV file first.");
   const [idCol,firstCol,lastCol,gradeCol]=["gradeIdColumn","gradeFirstColumn","gradeLastColumn","gradeValueColumn"].map(id=>Number($(id).value));
   if(idCol<0||gradeCol<0||idCol===gradeCol)throw Error("Select distinct NCG ID and Grade columns.");
   const rows=selectedGradeRows().rows;
   if(rows.length>1000)throw Error("Maximum 1000 grade rows per reviewed batch.");
-  const records=rows.map(row=>({ncgId:text(row[idCol]).replace(/\.0$/, ""),grade:text(row[gradeCol]),firstName:firstCol>=0?text(row[firstCol]):"",lastName:lastCol>=0?text(row[lastCol]):""}));
-  if (!records.some(record => record.ncgId && record.grade)) throw Error("No valid NCG ID/Grade pairs found.");
-  await chrome.storage.session.set({gradezyGradeData:{assessment,worksheet:sheet.name,records,savedAt:Date.now()}});
+  const records=rows.map(row=>({ncgId:text(row[idCol]).replace(/\.0$/, ""),grade:text(row[gradeCol]),firstName:firstCol>=0?text(row[firstCol]):"",lastName:lastCol>=0?text(row[lastCol]):""})).filter(record=>record.ncgId&&record.grade);
+  if (!records.length) throw Error("No NCG IDs with grades found.");
+  await chrome.storage.session.set({gradezyGradeData:{worksheet:sheet.name,records,savedAt:Date.now()}});
   pendingGradePreview = null;
-  $("applyGrades").hidden = true;
-  status(`Staged ${records.length} rows from ${sheet.name}. Open the correct StaffAdvantage assessment to compare NCG IDs and student names.`);
+  $("matchSourceSummary").textContent=`${records.length} grades from ${sheet.name}`;
+  $("matchResults").hidden=true;
+  $("staffReview").checked=false;
+  setGradeStep("match");
+  status("");
   await refreshSummary();
 }
 async function previewGradeFill() {
@@ -426,16 +442,28 @@ async function previewGradeFill() {
   const state = await chrome.storage.session.get("gradezyGradeData");
   const batch = state.gradezyGradeData;
   if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
-  if (text($("staffScope").value) !== batch.assessment) throw Error("The assessment label differs from the staged file. Set it to the same assessment.");
   const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked,attemptNumber:$("staffAttempt").value});
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
-  const lines = ["Attempt: " + $("staffAttempt").value, "Matched: " + counts.ready, "0.00 values awaiting review: " + counts.zeroReview, "0.00 fields included with permission: " + counts.readyZero, "Already graded: " + counts.identical, "Conflicts: " + counts.conflict, "Not found: " + counts.missing, "Duplicates: " + counts.duplicate, "Name mismatches: " + counts.nameMismatch, "Invalid rows: " + counts.invalid, "Unavailable fields: " + counts.readonly, "", "NCG ID | Excel student | StaffAdvantage student | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
-  setPreview(lines.join("\n"));
+  const exceptions=counts.missing+counts.duplicate+counts.nameMismatch+counts.conflict+counts.readonly+counts.invalid+counts.zeroReview;
+  $("matchSummary").textContent=`${counts.ready} ready · ${counts.identical} already entered · ${exceptions} need attention`;
+  const wrapper=$("matchPreview");wrapper.replaceChildren();
+  const table=document.createElement("table");const head=document.createElement("thead");const row=document.createElement("tr");
+  ["NCG ID","Student","Grade","Status"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
+  const body=document.createElement("tbody");
+  for(const match of (result.data.details||[]).slice(0,80)){
+    const tr=document.createElement("tr");
+    [match.ncgId,match.staffName||`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
+  }
+  table.append(body);wrapper.append(table);
+  $("matchResults").hidden=false;
+  $("toLive").disabled=counts.ready===0;
+  $("liveSummary").textContent=`${counts.ready} grades ready to fill · Attempt ${$("staffAttempt").value}`;
+  hidePreview();
   $("applyGrades").dataset.hasReady=counts.ready>0?"yes":"no";
   $("applyGrades").hidden = !counts.ready || !$("staffReview").checked;
-  status("Matches ready. Check the results, then confirm before filling.");
+  status("");
 }
 async function applyGradeFill() {
   if (system !== "staff" || !tab?.id || tab.id !== pendingGradePreview?.tabId) throw Error("The preview is no longer valid.");
@@ -445,8 +473,8 @@ async function applyGradeFill() {
   $("applyGrades").hidden = true;
   if (!result?.success) throw Error(result?.error || "Could not populate grade fields.");
   const counts = result.data;
-  setPreview("Grade population results\nFields populated: " + counts.populated + "\nSkipped: " + counts.skipped + "\nFailed: " + counts.failed + "\n\nReview the visible StaffAdvantage form carefully. Gradezy did not click Save or Submit. The website itself may autosave changes.");
-  status("Grade entry finished. Check the page before taking any final action.");
+  $("liveSummary").textContent=`${counts.populated} filled · ${counts.skipped} skipped · ${counts.failed} failed. Check StaffAdvantage.`;
+  status("");
 }
 
 $("refresh").addEventListener("click", () => action(refreshTab));
@@ -469,15 +497,27 @@ $("gradeSheet").addEventListener("change", renderGradeFile);
 $("gradeHeaderRow").addEventListener("change",renderGradeColumns);
 for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLastColumn"])$(id).addEventListener("change",refreshGradePreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
+$("startMatch").addEventListener("click", () => action(async () => {
+  $("matchResults").hidden=true;
+  await refreshTab();
+  if(system!=="staff")throw Error("Open the StaffAdvantage grade page, then Start Match.");
+  const found=await readStaff();
+  if(!found)throw Error("No students found in the StaffAdvantage grade table.");
+  await previewGradeFill();
+}));
+$("toLive").addEventListener("click",()=>{if(!pendingGradePreview)return status("Start Match again.",true);$("staffReview").checked=false;$("applyGrades").hidden=true;setGradeStep("live");});
+$("backToUpload").addEventListener("click",()=>setGradeStep("upload"));
+$("backToMatch").addEventListener("click",()=>setGradeStep("match"));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
 $("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
-$("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("applyGrades").hidden=true;status("0.00 setting changed. Review matches again.");});
-$("staffAttempt").addEventListener("change", () => {pendingGradePreview=null;$("applyGrades").hidden=true;status("Attempt changed. Review matches again.");});
+$("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("matchResults").hidden=true;$("applyGrades").hidden=true;status("");});
+$("staffAttempt").addEventListener("change", () => {pendingGradePreview=null;$("matchResults").hidden=true;$("applyGrades").hidden=true;status("");});
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
   await chrome.storage.session.remove(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
   gradeWorkbook=null;$("staffFile").value="";$("gradeImportOptions").hidden=true;$("stageGrades").disabled=true;
+  if(gradezySelectedWorkflow==="staff")setGradeStep("upload");
   hidePreview(); await refreshSummary(); status("All saved assessment session data cleared.");
 }));
 chrome.tabs.onActivated.addListener(() => { refreshTab().catch(e => status(e.message, true)); });
@@ -487,8 +527,7 @@ chrome.tabs.onUpdated.addListener((_id, change, updated) => {
 refreshTab().catch(e => status(e.message, true));
 
 /* User-selected workflow navigation. Site detection still controls access to live pages. */
-let gradezySelectedWorkflow = null;
-function gradezyShowWorkflow(which) {
+function gradezyShowWorkflow(which, preserveStep = false) {
   gradezySelectedWorkflow = which;
   document.body.classList.toggle("grade-flow",which==="staff");
   for (const [id, value] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
@@ -502,7 +541,9 @@ function gradezyShowWorkflow(which) {
   $("otherSection").querySelector("h2").textContent = "Page connection";
   $("otherSection").querySelector("p").textContent = system === which || (which === "tracker" && system === "excel") ? "This workflow matches your current browser page. Use the tools above." : "Open the matching " + ({moodle:"Moodle",staff:"StaffAdvantage",tracker:"SharePoint"}[which]) + " page in a browser tab to use the live page tools.";
   if (system === which || (which === "tracker" && system === "excel")) $("otherSection").hidden = true;
-  status("Selected " + ({moodle:"Moodle · Download Scores",staff:"StaffAdvantage · Grade Fill",tracker:"SharePoint · Progress Tracker"}[which]) + ".");
+  if(which==="staff")setGradeStep(preserveStep?gradeFlowStep:"upload");
+  else $("gradeFlowSteps").hidden=true;
+  if(!preserveStep)status("");
 }
 for (const [id, systemName] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
   $(id)?.addEventListener("click", () => gradezyShowWorkflow(systemName));
