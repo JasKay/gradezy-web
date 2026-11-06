@@ -18,7 +18,7 @@ export default function StaffAdvantagePreview(){
  const gradeCol=attempt==="first"?finals[0]:finals[1];const out:Row[]=[];
  for(let i=1;i<grid.length;i++){const r=grid[i]||[];if(!clean(r[id])&&!clean(r[first])&&!clean(r[last]))continue;const grade=clean(r[gradeCol]);let status="Ready";const n=Number(grade.replace(/%$/,""));if(!clean(r[id])||!clean(r[first])||!clean(r[last]))status="Missing identity";else if(!grade)status="Missing grade";else if(!Number.isFinite(n)||n<0||n>100)status="Invalid grade";out.push({row:i+1,id:clean(r[id]),first:clean(r[first]),last:clean(r[last]),grade,status})}
  const counts=new Map<string,number>();for(const r of out)counts.set(norm(r.id),(counts.get(norm(r.id))||0)+1);
- for(const r of out)if(counts.get(norm(r.id))!>1)r.status="Duplicate NCG ID";
+ for(const r of out)if((counts.get(norm(r.id))||0)>1)r.status="Duplicate NCG ID";
  setRows(out);setReviewed(true)}
  const ready=rows.filter(r=>r.status==="Ready");
  const matches=rows.map(r=>{const d=demo.find(x=>norm(x.id)===norm(r.id));const status=r.status!=="Ready"?r.status:!d?"Not found in sample StaffAdvantage":norm(d.first)!==norm(r.first)||norm(d.last)!==norm(r.last)?"Name mismatch":d.percentage===r.grade?"Already matches":"Proposed update";return {...r,percentage:d?.percentage??"—",matchStatus:status}});
