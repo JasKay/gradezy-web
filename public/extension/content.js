@@ -6,10 +6,17 @@ function cellValue(cell) {
   const field = cell.querySelector("input, select, textarea");
   return clean(field ? field.value : cell.innerText || cell.textContent);
 }
+function cellDetails(cell) {
+  if (!cell) return "";
+  // Preserve line boundaries: StaffAdvantage often puts the name and NCG ID
+  // on separate lines inside the same Student Details cell.
+  return cell.innerText || cell.textContent || "";
+}
 function headerKey(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " "); }
 function findStaffAdvantageTable() {
   return [...document.querySelectorAll("table")].find((table) => {
-    const headings = headerKey(table.querySelector("thead")?.innerText || "");
+    const headings = headerKey(table.querySelector("thead")?.innerText || table.querySelector("thead")?.textContent ||
+      [...table.querySelectorAll("tr")].slice(0, 2).map(row => row.textContent).join(" "));
     return headings.includes("attempt") && headings.includes("percentage") && (headings.includes("student") || headings.includes("details"));
   }) || null;
 }
@@ -34,11 +41,12 @@ function parseStudentDetails(value, row) {
   const lines = String(value ?? "").split(/\n+/).map(clean).filter(Boolean);
   const labelledId = text.match(/(?:ncg\s*(?:id|number)?|student\s*id)\s*[:#-]?\s*([a-z0-9-]{4,})/i);
   const numericId = lines.find((line) => /^\d{4,}$/.test(line));
-  const ncgId = normaliseId(labelledId?.[1] || numericId || row.getAttribute("data-student-id") || row.dataset.studentId);
-  const nameLine = lines.find((line) => line !== numericId && !/^(?:ncg\s*)?(?:id|number)\b/i.test(line)) || "";
+  const inlineId = text.match(/\b\d{6,12}\b/);
+  const ncgId = normaliseId(labelledId?.[1] || numericId || inlineId?.[0] || row.getAttribute("data-student-id") || row.dataset.studentId);
+  const nameLine = lines.find((line) => line !== numericId && !/^(?:ncg\s*)?(?:id|number)\b/i.test(line) && !/^\d{6,12}$/.test(line)) || "";
   const commaName = nameLine.split(",").map(clean);
   const nameParts = (commaName.length >= 2 ? `${commaName.slice(1).join(" ")} ${commaName[0]}` : nameLine)
-    .replace(/\b(?:ncg\s*)?(?:id|number)\b.*$/i, "").split(" ").filter(Boolean);
+    .replace(/\b(?:ncg\s*)?(?:id|number)\b.*$/i, "").replace(/\b\d{6,12}\b/g, "").split(" ").filter(Boolean);
   return { ncgId, firstName: nameParts.shift() || "", lastName: nameParts.join(" ") };
 }
 function isChecked(cells, index) {
@@ -56,7 +64,7 @@ function extractStaffAdvantageStudents() {
   return [...table.querySelectorAll("tbody tr")].map((row) => {
     const cells = [...row.querySelectorAll(":scope > td")];
     if (cells.length <= Math.max(columns.details, columns.grade)) return null;
-    const student = parseStudentDetails(cellValue(cells[columns.details]), row);
+    const student = parseStudentDetails(cellDetails(cells[columns.details]), row);
     const key = `${student.ncgId}|${student.firstName}|${student.lastName}|${cellValue(cells[columns.attempt])}`.toLowerCase();
     if ((!student.ncgId && !student.firstName && !student.lastName) || seen.has(key)) return null;
     seen.add(key);
@@ -75,7 +83,24 @@ function getPageInfo() {
   const students = extractStaffAdvantageStudents();
   return { url: location.href, title: document.title, hostname: location.hostname, source: "StaffAdvantage", studentCount: students.length };
 }
+function gradezyScanDiagnostics() {
+  const tables = [...document.querySelectorAll("table")];
+  const table = findStaffAdvantageTable();
+  return {
+    tableCount: tables.length,
+    matchedTable: Boolean(table),
+    matchedRows: table?.querySelectorAll("tbody tr").length || 0,
+    // Header labels only. Never expose student names/IDs in diagnostics.
+    headers: tables.slice(0, 8).map(t => [...t.querySelectorAll("thead th, thead td")]
+      .slice(0, 15).map(h => clean(h.innerText || h.textContent))),
+    frameCount: document.querySelectorAll("iframe").length,
+    urlPath: location.pathname,
+  };
+}
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.action === "diagnoseStaffAdvantageScan") {
+    sendResponse({ success: true, data: gradezyScanDiagnostics() }); return;
+  }
   if (request.action === "readStaffAdvantageStudents" || request.action === "extractStudents") {
     const students = extractStaffAdvantageStudents();
     sendResponse({ success: true, data: { students, count: students.length } }); return;
@@ -104,7 +129,7 @@ function gradezyBuildFillPlan(records) {
   const targetRows = new Map();
   for (const [index, row] of [...table.querySelectorAll("tbody tr")].entries()) {
     const cells = [...row.querySelectorAll(":scope > td")];
-    const id = parseStudentDetails(cellValue(cells[columns.details]), row).ncgId;
+    const id = parseStudentDetails(cellDetails(cells[columns.details]), row).ncgId;
     if (!id) continue;
     const existing = targetRows.get(id) || [];
     existing.push({ index, row, cells });
