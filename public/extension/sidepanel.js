@@ -422,15 +422,16 @@ async function stageGradeFile() {
 }
 async function previewGradeFill() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
+  if(!$("staffAttempt").value)throw Error("Choose the assessment attempt first.");
   const state = await chrome.storage.session.get("gradezyGradeData");
   const batch = state.gradezyGradeData;
   if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
   if (text($("staffScope").value) !== batch.assessment) throw Error("The assessment label differs from the staged file. Set it to the same assessment.");
-  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked});
+  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked,attemptNumber:$("staffAttempt").value});
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
-  const lines = ["Matched: " + counts.ready, "0.00 values awaiting review: " + counts.zeroReview, "0.00 fields included with permission: " + counts.readyZero, "Already graded: " + counts.identical, "Conflicts: " + counts.conflict, "Not found: " + counts.missing, "Duplicates: " + counts.duplicate, "Name mismatches: " + counts.nameMismatch, "Invalid rows: " + counts.invalid, "Unavailable fields: " + counts.readonly, "", "NCG ID | Excel student | StaffAdvantage student | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
+  const lines = ["Attempt: " + $("staffAttempt").value, "Matched: " + counts.ready, "0.00 values awaiting review: " + counts.zeroReview, "0.00 fields included with permission: " + counts.readyZero, "Already graded: " + counts.identical, "Conflicts: " + counts.conflict, "Not found: " + counts.missing, "Duplicates: " + counts.duplicate, "Name mismatches: " + counts.nameMismatch, "Invalid rows: " + counts.invalid, "Unavailable fields: " + counts.readonly, "", "NCG ID | Excel student | StaffAdvantage student | Grade | Result", ...(result.data.details || []).map(row=>[row.ncgId,`${row.firstName} ${row.lastName}`.trim(),row.staffName,row.grade,row.status].join(" | "))];
   setPreview(lines.join("\n"));
   $("applyGrades").dataset.hasReady=counts.ready>0?"yes":"no";
   $("applyGrades").hidden = !counts.ready || !$("staffReview").checked;
@@ -471,6 +472,7 @@ $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
 $("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
 $("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("applyGrades").hidden=true;status("0.00 setting changed. Review matches again.");});
+$("staffAttempt").addEventListener("change", () => {pendingGradePreview=null;$("applyGrades").hidden=true;status("Attempt changed. Review matches again.");});
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
