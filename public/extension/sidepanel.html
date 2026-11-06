@@ -32,9 +32,9 @@ a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
 <button id="previewPage" class="full">Preview against visible tracker</button>
 <label for="trackerFile">Or choose Tracker CSV/TSV</label><input id="trackerFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
 <button id="previewCsv" class="secondary full">Preview against Tracker export</button><button id="downloadCsv" class="secondary full" hidden>Download reviewed CSV</button></section>
-<section id="gradeSection" class="card" hidden><div class="kicker">Excel / StaffAdvantage · Grade Fill</div><h2 style="margin-top:5px">Prepare final grades by NCG ID</h2><p>Load a local CSV/TSV containing NCG ID and Grade columns. No data is sent to the Gradezy website.</p>
+<section id="gradeSection" class="card" hidden><div class="kicker">Excel / StaffAdvantage · Grade Fill</div><h2 style="margin-top:5px">Prepare final grades by NCG ID</h2><p>Upload an Excel (.xlsx), CSV or TSV file containing student ID and grade columns. Data stays in this browser. No data is sent to the Gradezy website.</p>
 <label for="staffScope">Module and assessment label</label><input id="staffScope" placeholder="e.g. BM4001 · Final grade">
-<label for="staffFile">Grade CSV/TSV (NCG ID + Grade)</label><input id="staffFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
+<label for="staffFile">Grade Excel/CSV (Student ID + Grade)</label><input id="staffFile" type="file" accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values">
 <button id="stageGrades" class="secondary full">Stage grades locally</button><div id="gradeSummary" class="hint" style="margin-top:8px"></div></section>
 <section id="staffSection" class="card" hidden><div class="kicker">StaffAdvantage · Reviewed grade entry</div><h2 style="margin-top:5px">Read and populate assessment fields</h2><p>Uses the existing StaffAdvantage table reader. Grade filling requires a separate preview and approval. Gradezy never clicks Save or Submit; the website may autosave changes.</p>
 <button id="readStaff" class="secondary full">Read current student records</button>
