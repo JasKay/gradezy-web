@@ -305,6 +305,24 @@ async function readStaff() {
   if (!response?.success) throw Error(response?.error || "Could not read StaffAdvantage. Refresh the page and try again.");
   const students = response.data?.students || [];
   await chrome.storage.session.set({gradezyStaffSnapshot:{count:students.length,savedAt:Date.now()}});
+  if (!students.length) {
+    const diagnostics = await chrome.tabs.sendMessage(tab.id, {action:"diagnoseStaffAdvantageScan"});
+    const d = diagnostics?.data || {};
+    setPreview([
+      "No StaffAdvantage students detected — diagnostic scan",
+      "Tables found: " + (d.tableCount ?? "unknown"),
+      "Assessment table recognised: " + (d.matchedTable ? "yes" : "no"),
+      "Rows in assessment table: " + (d.matchedRows ?? 0),
+      "Frames on page: " + (d.frameCount ?? "unknown"),
+      "Table headers: " + (d.headers || []).map(h => h.join(" | ")).filter(Boolean).join(" / "),
+      "",
+      "Open the assessment's student grid (not the class landing page), wait for the rows to load, then scan again.",
+      "If the rows are visible but still not detected, share only the diagnostic text above (no student records)."
+    ].join("\n"));
+    status("No students found. See the diagnostic details below.", true);
+    await refreshSummary();
+    return;
+  }
   setPreview("StaffAdvantage assessment table\nStudents detected: " + students.length + "\nRead-only extraction completed.\nNo grades were entered or submitted.");
   status("Read " + students.length + " student records from the active StaffAdvantage page.");
   await refreshSummary();
