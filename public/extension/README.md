@@ -43,6 +43,20 @@ The unpacked extension has a different extension ID from the published Edge add-
 
 Run `npm test` to execute the extension contract and matching smoke tests along with existing application tests. Validate the unpacked side panel on Edge and Chrome, particularly domain detection, permissions, exported CSV formats, virtualised SharePoint grids, and StaffAdvantage's grade-entry events, before merging or releasing.
 
+### Edge Add-ons release pipeline
+
+The GitHub Actions workflow `.github/workflows/gradezy-extension.yml` builds a ZIP on extension changes. It only submits to the Edge store through an **explicit manual workflow dispatch on `main`** with `publish_to_edge` checked and `release_version` exactly matching the manifest. Other pushes only build an artifact. The `edge-store` GitHub Environment can be configured with required reviewers for an additional approval gate.
+
+Initial setup (repository administrator):
+
+1. Confirm this existing Edge product is listed in [Microsoft Partner Center](https://partner.microsoft.com/dashboard). Under **Microsoft Edge → Publish API**, enable v1.1 and create an API Client ID and API key.
+2. In the GitHub repository settings, create the `edge-store` Environment and add secrets `EDGE_PRODUCT_ID` (the **Partner Center product GUID**, not the browser extension ID), `EDGE_CLIENT_ID`, and `EDGE_API_KEY`. Configure an environment reviewer if desired. Do not commit these values.
+3. Merge and live-test the intended extension build before publishing. Increment `public/extension/manifest.json` version for each new release.
+4. From GitHub **Actions → Build Gradezy browser extension → Run workflow**, select `main`, check `publish_to_edge`, and enter the exact manifest version.
+5. The workflow waits for package upload and submission completion. A successful submission still requires Microsoft's certification before Edge users receive the automatic update. An unpacked extension does not automatically migrate to the store-installed one.
+
+The Microsoft API does not update listing metadata; change descriptions and screenshots in Partner Center. Keep API keys rotated before expiry. If the Edge product has not been published previously, publish it manually first.
+
 ## Architecture
 
 `sidepanel.html` / `sidepanel.js` handle current-page awareness, CSV parsing, temporary record staging, and previews. `content.js` exposes StaffAdvantage read and reviewed blank-grade-entry operations; `background.js` retains the website-to-StaffAdvantage bridge and enables side-panel launch. The old `popup.*` files remain only for backwards compatibility and are no longer the toolbar UI.
