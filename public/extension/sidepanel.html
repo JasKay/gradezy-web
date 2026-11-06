@@ -4,7 +4,7 @@
 :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f6f9f7;color:#183b2f;font:13px system-ui,-apple-system,Segoe UI,sans-serif}
 header{padding:19px 18px 14px;background:#fff;border-bottom:1px solid #dae5dd;position:sticky;top:0;z-index:2}h1{font-size:25px;letter-spacing:-1.5px;margin:0}h1 span{color:#349269}
 .sub{font-size:11px;color:#6a8175;margin:3px 0 0}.workspace{padding:15px 17px 22px}h2{font-size:14px;margin:0 0 7px}p{line-height:1.5;color:#536f61;margin:7px 0}
-.card{border:1px solid #dce6df;border-radius:13px;background:#fff;padding:14px;margin:0 0 12px}
+.card{border:1px solid #dce6df;border-radius:13px;background:#fff;padding:14px;margin:0 0 10px}
 .kicker{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6c8577;font-weight:750}
 #siteLabel{font-size:17px;font-weight:720;margin:5px 0}#pageTitle{font-size:11px;color:#74867c;overflow-wrap:anywhere}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.chip{font-size:10px;color:#326a52;background:#e8f3ec;border-radius:20px;padding:5px 9px}
@@ -20,10 +20,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 ui-monospace,mono
 a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
 .system-picker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:12px}.system-picker button{padding:13px 5px;background:#f0f6f2;color:#255942;border:1px solid #d4e4d9;font-size:11px}.system-picker button.selected{background:#1d6548;color:#fff}.system-picker span{display:block;font-size:18px;margin-bottom:6px}
 .mapping{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mapping label{margin-top:6px}.preview-table{overflow:auto;max-height:260px;border:1px solid #dce6df;border-radius:8px;margin-top:9px}.preview-table table{border-collapse:collapse;width:100%;font-size:11px}.preview-table th,.preview-table td{padding:7px 9px;border-bottom:1px solid #e5ece6;text-align:left;white-space:nowrap}.preview-table th{position:sticky;top:0;background:#eef5f0}
+.step-label{font-size:13px;font-weight:750;color:#23694a;margin:5px 0 10px}.check-row{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#445e50;margin:10px 0}.check-row input{flex:none;margin-top:2px}.compact-note{font-size:10px;color:#738579}
+.grade-flow #currentPageCard,.grade-flow #sessionCard,.grade-flow footer{display:none}.grade-flow .workspace{padding-top:10px}.grade-flow #otherSection{border-color:#e5ece6}
 </style></head><body>
 <header><h1>gradezy<span>.</span></h1><p class="sub">Assessment workspace · stays open across tabs</p></header>
-<main class="workspace">\n<section class="card"><div class="kicker">Choose your workflow</div><div class="system-picker"><button type="button" id="chooseMoodle"><span>▤</span>Moodle</button><button type="button" id="chooseStaff"><span>✓</span>StaffAdvantage</button><button type="button" id="chooseTracker"><span>☷</span>SharePoint</button></div><p class="hint">Select a workflow, then open the corresponding browser page to use its live tools.</p></section>
-<section class="card"><div class="kicker">Current browser page</div><div id="siteLabel">Checking...</div><div id="pageTitle"></div><div class="chips"><span id="siteType" class="chip">Detecting</span><span id="accessStatus" class="chip">Local only</span></div><button id="refresh" class="secondary full">Refresh page detection</button></section>
+<main class="workspace"><section class="card"><div class="system-picker"><button type="button" id="chooseMoodle"><span>▤</span>Moodle</button><button type="button" id="chooseStaff"><span>✓</span>StaffAdvantage</button><button type="button" id="chooseTracker"><span>☷</span>SharePoint</button></div></section>
+<section id="currentPageCard" class="card"><div class="kicker">Current browser page</div><div id="siteLabel">Checking...</div><div id="pageTitle"></div><div class="chips"><span id="siteType" class="chip">Detecting</span><span id="accessStatus" class="chip">Local only</span></div><button id="refresh" class="secondary full">Refresh page detection</button></section>
 <section id="moodleSection" class="card" hidden><div class="kicker">Moodle · Capture</div><h2 style="margin-top:5px">Capture Turnitin submission records</h2><p>Try visible Moodle tables first. If Paper IDs are only available in an export, choose a CSV/TSV file.</p><label for="assessment">Assessment or module label (required)</label><input id="assessment" placeholder="e.g. BM4001 · Assessment 1" autocomplete="off">
 <label for="attempt">Submission attempt</label><select id="attempt"><option value="">Choose explicitly</option><option value="first">First attempt</option><option value="resub">Resubmission</option></select>
 <button id="captureMoodle" class="full">Capture visible Moodle table</button><label for="moodleFile">Or import Turnitin CSV/TSV</label><input id="moodleFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
@@ -33,19 +35,20 @@ a{color:#23694a}footer{font-size:10px;color:#788d80;padding:6px 17px 20px}
 <button id="previewPage" class="full">Preview against visible tracker</button>
 <label for="trackerFile">Or choose Tracker CSV/TSV</label><input id="trackerFile" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values">
 <button id="previewCsv" class="secondary full">Preview against Tracker export</button><button id="downloadCsv" class="secondary full" hidden>Download reviewed CSV</button></section>
-<section id="gradeSection" class="card" hidden><div class="kicker">Excel / StaffAdvantage · Grade Fill</div><h2 style="margin-top:5px">Prepare final grades by NCG ID</h2><p>Upload an Excel (.xlsx), CSV or TSV file containing student ID and grade columns. Data stays in this browser. No data is sent to the Gradezy website.</p>
-<label for="staffScope">Module and assessment label</label><input id="staffScope" placeholder="e.g. BM4001 · Final grade">
-<label for="staffFile">Grade Excel/CSV (Student ID + Grade)</label><input id="staffFile" type="file" accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values">
+<section id="gradeSection" class="card" hidden><div class="step-label">1 · Upload grades</div>
+<label for="staffScope">Assessment</label><input id="staffScope" placeholder="BM4001 · Final grade">
+<label for="staffFile">Excel or CSV</label><input id="staffFile" type="file" accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values">
 <div id="gradeImportOptions" hidden><label for="gradeSheet">Worksheet to import</label><select id="gradeSheet"></select><label for="gradeHeaderRow">Column headings are on row</label><select id="gradeHeaderRow"></select><div class="mapping"><label>NCG ID column<select id="gradeIdColumn"></select></label><label>Grade column<select id="gradeValueColumn"></select></label><label>First name (optional)<select id="gradeFirstColumn"></select></label><label>Last name (optional)<select id="gradeLastColumn"></select></label></div><div id="gradeFileInfo" class="hint" style="margin-top:8px"></div><div id="gradeFilePreview" class="preview-table"></div></div>
-<button id="stageGrades" class="secondary full" disabled>Confirm worksheet and stage grades</button><div id="gradeSummary" class="hint" style="margin-top:8px"></div></section>
-<section id="staffSection" class="card" hidden><div class="kicker">StaffAdvantage · Reviewed grade entry</div><h2 style="margin-top:5px">Read and populate assessment fields</h2><p>Uses the existing StaffAdvantage table reader. Grade filling requires a separate preview and approval. Gradezy never clicks Save or Submit; the website may autosave changes.</p>
-<button id="readStaff" class="secondary full">Read current student records</button>
-<label><input id="staffReview" type="checkbox">I have checked the module, attempt, student list and proposed grades.</label>
-<button id="previewGrades" class="full">Preview NCG ID matches</button>
-<button id="applyGrades" class="full" hidden>Populate reviewed grade fields (no Save/Submit)</button></section>
+<button id="stageGrades" class="secondary full" disabled>Use these grades</button><div id="gradeSummary" class="hint" style="margin-top:8px"></div></section>
+<section id="staffSection" class="card" hidden><div class="step-label">2 · Match StaffAdvantage</div>
+<button id="readStaff" class="secondary full">Scan student list</button>
+<label class="check-row"><input id="staffZeroReview" type="checkbox">Allow replacing 0.00 after review <span class="compact-note">(it might be a real grade)</span></label>
+<button id="previewGrades" class="full">Review grade matches</button>
+<label class="check-row"><input id="staffReview" type="checkbox">I checked the assessment, IDs, names and grades.</label>
+<button id="applyGrades" class="full" hidden>Fill approved grades</button><p class="compact-note">No Save/Submit click. StaffAdvantage may autosave.</p></section>
 
 <section id="otherSection" class="card" hidden><h2>No supported workflow on this page</h2><p>Open a Moodle assessment, SharePoint Progress Tracker, Excel Online, or StaffAdvantage tab. Gradezy will switch tools automatically.</p></section>
-<section class="card"><div class="kicker">Session workspace</div><div id="savedSummary" style="margin-top:7px">No records captured.</div><div id="staffSummary" class="hint" style="margin-top:5px"></div><button id="clearData" class="secondary full">Clear saved assessment records</button></section>
+<section id="sessionCard" class="card"><div class="kicker">Session workspace</div><div id="savedSummary" style="margin-top:7px">No records captured.</div><div id="staffSummary" class="hint" style="margin-top:5px"></div><button id="clearData" class="secondary full">Clear saved assessment records</button></section>
 <section class="card"><h2>Preview and exceptions</h2><div id="status" role="status" aria-live="polite">Select a supported assessment page to begin.</div><pre id="preview" hidden></pre></section>
 </main><footer>Records remain in this browser's session storage. No automatic SharePoint, Excel or StaffAdvantage writes. Use only with your organisation's permission.</footer>
 <script src="sidepanel.js"></script></body></html>
