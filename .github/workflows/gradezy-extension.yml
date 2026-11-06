@@ -2,6 +2,15 @@ name: Build Gradezy browser extension
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_to_edge:
+        description: 'Submit this build to Microsoft Edge Add-ons for review?'
+        type: boolean
+        default: false
+      release_version:
+        description: 'Exact manifest version to publish (example: 1.3.1)'
+        type: string
+        required: false
   push:
     branches:
       - feature/gradezy-unified-sidepanel
@@ -34,6 +43,8 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           find public/extension -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check
+      - name: Test extension behaviour
+        run: node --test tests/extension-unified.test.cjs
       - name: Package extension
         run: |
           cd public/extension
@@ -43,3 +54,29 @@ jobs:
           name: gradezy-extension
           path: gradezy-extension.zip
           retention-days: 30
+  publish-edge:
+    needs: package
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_to_edge == true && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: edge-store
+    concurrency:
+      group: gradezy-edge-store
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify requested version
+        env:
+          REQUESTED_VERSION: ${{ inputs.release_version }}
+        run: |
+          node -e 'const m=require("./public/extension/manifest.json"); if (m.version !== process.env.REQUESTED_VERSION) { console.error(`Expected manifest version ${process.env.REQUESTED_VERSION}, found ${m.version}`); process.exit(1); }'
+      - uses: actions/download-artifact@v4
+        with:
+          name: gradezy-extension
+      - name: Submit reviewed release to Edge Add-ons
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+          EDGE_PACKAGE_PATH: gradezy-extension.zip
+          EDGE_RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node scripts/publish-edge-extension.mjs
