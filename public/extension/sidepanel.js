@@ -138,10 +138,79 @@ function parseDelimited(content, delimiter) {
   row.push(field); if (row.some(v => v.trim())) rows.push(row);
   return rows;
 }
+/* Native XLSX reader: local ZIP/XML parsing; no network calls or remote code. */
+async function readXlsx(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const decoder = new TextDecoder();
+  const findEnd = () => { for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--) if(view.getUint32(i,true)===0x06054b50)return i; throw Error("Invalid XLSX: ZIP directory missing."); };
+  const end=findEnd(), count=view.getUint16(end+10,true), offset=view.getUint32(end+16,true);
+  if(count>10000 || bytes.length>15*1024*1024)throw Error("Workbook exceeds the safe local import limit.");
+  const entries=new Map(); let p=offset;
+  for(let i=0;i<count;i++){
+    if(view.getUint32(p,true)!==0x02014b50)throw Error("Invalid XLSX ZIP entry.");
+    const method=view.getUint16(p+10,true), packed=view.getUint32(p+20,true), size=view.getUint32(p+24,true);
+    const len=view.getUint16(p+28,true), extra=view.getUint16(p+30,true), comment=view.getUint16(p+32,true);
+    const name=decoder.decode(bytes.subarray(p+46,p+46+len));
+    entries.set(name,{method,packed,size,offset:view.getUint32(p+42,true)});
+    p+=46+len+extra+comment;
+  }
+  async function xmlFile(name){
+    const e=entries.get(name);if(!e)return null;
+    if(e.size>30*1024*1024)throw Error("Workbook XML is too large.");
+    const o=e.offset;if(view.getUint32(o,true)!==0x04034b50)throw Error("Invalid workbook ZIP header.");
+    const start=o+30+view.getUint16(o+26,true)+view.getUint16(o+28,true);
+    const data=bytes.slice(start,start+e.packed);
+    let raw;
+    if(e.method===0)raw=data;
+    else if(e.method===8){
+      try{
+        const stream=new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        raw=new Uint8Array(await new Response(stream).arrayBuffer());
+      }catch{throw Error("This browser cannot unpack this XLSX file. Export CSV or update Chrome/Edge.");}
+    }else throw Error("Unsupported XLSX compression method.");
+    return new DOMParser().parseFromString(decoder.decode(raw),"application/xml");
+  }
+  const stringsDoc=await xmlFile("xl/sharedStrings.xml");
+  const shared=stringsDoc?[...stringsDoc.getElementsByTagName("si")].map(si=>[...si.getElementsByTagName("t")].map(t=>t.textContent||"").join("")):[];
+  const workbook=await xmlFile("xl/workbook.xml");
+  const rels=await xmlFile("xl/_rels/workbook.xml.rels");
+  let sheetName="xl/worksheets/sheet1.xml";
+  if(workbook&&rels){
+    const sheet=workbook.getElementsByTagName("sheet")[0];
+    const id=sheet?.getAttribute("r:id");
+    const rel=[...rels.getElementsByTagName("Relationship")].find(r=>r.getAttribute("Id")===id);
+    const target=rel?.getAttribute("Target");
+    if(target)sheetName=target.startsWith("/")?target.slice(1):target.startsWith("xl/")?target:"xl/"+target.replace(/^\.\.\//,"");
+  }
+  const sheet=await xmlFile(sheetName);
+  if(!sheet)throw Error("Could not find the first worksheet in this XLSX file.");
+  if(sheet.getElementsByTagName("parsererror").length)throw Error("Invalid worksheet XML.");
+  const rows=[];
+  for(const row of sheet.getElementsByTagName("row")){
+    const values=[];
+    for(const cell of row.getElementsByTagName("c")){
+      const ref=cell.getAttribute("r")||"";
+      const letters=ref.match(/^[A-Z]+/i)?.[0]||"";
+      let col=0;for(const ch of letters.toUpperCase())col=col*26+ch.charCodeAt(0)-64;
+      if(col<1||col>256)continue;
+      const type=cell.getAttribute("t");
+      const v=cell.getElementsByTagName("v")[0]?.textContent||"";
+      const inline=cell.getElementsByTagName("is")[0];
+      values[col-1]=type==="s"?(shared[Number(v)]??""):type==="inlineStr"?(inline?.textContent||""):v;
+    }
+    if(values.some(v=>String(v??"").trim()))rows.push(Array.from({length:values.length},(_,i)=>values[i]??""));
+    if(rows.length>1002)throw Error("Workbook exceeds the 1000-grade-row limit.");
+  }
+  if(rows.length<2)throw Error("No grade data found in the first worksheet.");
+  return {headers:rows[0],rows:rows.slice(1),allRows:rows};
+}
+
 async function fileTable(inputId) {
   const file = $(inputId).files?.[0];
-  if (!file) throw Error("Choose a CSV or TSV file first.");
-  if (!/\.(csv|tsv)$/i.test(file.name)) throw Error("Only CSV/TSV is supported. Save the XLSX export as CSV first.");
+  if (!file) throw Error("Choose an Excel, CSV or TSV file first.");
+  if (/\.xlsx$/i.test(file.name)) return readXlsx(file);
+  if (!/\.(csv|tsv)$/i.test(file.name)) throw Error("Choose a .xlsx, .csv or .tsv file.");
   if (file.size > 15 * 1024 * 1024) throw Error("File is larger than the 15 MB local import limit.");
   const rows = parseDelimited(await file.text(), /\.tsv$/i.test(file.name) ? "\t" : ",");
   if (rows.length < 2) throw Error("No data rows found.");
@@ -249,7 +318,7 @@ async function stageGradeFile() {
   const assessment = text($("staffScope").value);
   if (!assessment) throw Error("Enter the module and assessment label first.");
   const t = await fileTable("staffFile");
-  const idCol = findIndex(t.headers, ["ncgid", "ncgstudentid", "studentid"]);
+  const idCol = findIndex(t.headers, ["ncgid", "ncgstudentid", "studentid", "studentnumber", "ncgnumber"]);
   const gradeCol = findIndex(t.headers, ["grade", "grades", "finalgrade", "finalmark", "percentage", "mark", "marks", "score"]);
   if (idCol < 0 || gradeCol < 0) throw Error("Grade file needs NCG ID and Grade (or Percentage) columns.");
   if (t.rows.length > 1000) throw Error("Maximum 1000 rows per reviewed grade batch.");
