@@ -121,6 +121,7 @@ function gradezyGrade(value) {
   const number = Number(raw);
   return Number.isFinite(number) && number >= 0 && number <= 100 ? number.toFixed(2) : null;
 }
+function gradezyName(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function gradezyBuildFillPlan(records) {
   const table = findStaffAdvantageTable();
   if (!table) throw Error("StaffAdvantage assessment table is not visible.");
@@ -132,7 +133,7 @@ function gradezyBuildFillPlan(records) {
     const id = parseStudentDetails(cellDetails(cells[columns.details]), row).ncgId;
     if (!id) continue;
     const existing = targetRows.get(id) || [];
-    existing.push({ index, row, cells });
+    existing.push({ index, row, cells, student:parseStudentDetails(cellDetails(cells[columns.details]),row) });
     targetRows.set(id, existing);
   }
   const sourceCounts = new Map();
@@ -140,9 +141,10 @@ function gradezyBuildFillPlan(records) {
     const id = normaliseId(rec.ncgId);
     sourceCounts.set(id, (sourceCounts.get(id) || 0) + 1);
   }
-  const outcome = { ready: 0, identical: 0, conflict: 0, missing: 0, duplicate: 0, invalid: 0, readonly: 0 };
+  const outcome = { ready: 0, identical: 0, conflict: 0, missing: 0, duplicate: 0, invalid: 0, readonly: 0, nameMismatch: 0 };
   const approved = [];
   const exceptions = [];
+  const details=[];
   for (const rec of records) {
     const id = normaliseId(rec.ncgId), grade = gradezyGrade(rec.grade);
     const matches = targetRows.get(id) || [];
@@ -150,6 +152,8 @@ function gradezyBuildFillPlan(records) {
     if (!id || grade === null) reason = "invalid";
     else if (sourceCounts.get(id) !== 1 || matches.length > 1) reason = "duplicate";
     else if (!matches.length) reason = "missing";
+    else if ((rec.firstName && gradezyName(rec.firstName) !== gradezyName(matches[0].student.firstName)) ||
+             (rec.lastName && gradezyName(rec.lastName) !== gradezyName(matches[0].student.lastName))) reason="nameMismatch";
     else {
       const match = matches[0], cell = match.cells[columns.grade];
       const input = cell?.querySelector("input[type='number'],input[type='text'],input:not([type]),textarea");
@@ -164,16 +168,17 @@ function gradezyBuildFillPlan(records) {
       outcome[reason]++;
       if (exceptions.length < 25) exceptions.push("NCG ID " + id + ": " + reason);
     }
+    details.push({ncgId:id,firstName:clean(rec.firstName),lastName:clean(rec.lastName),grade:clean(rec.grade),status:reason||"ready",staffName:matches.length===1?clean(`${matches[0].student.firstName} ${matches[0].student.lastName}`):""});
   }
   outcome.ready = approved.length;
-  return { outcome, approved, exceptions, page: location.href, title: document.title };
+  return { outcome, approved, exceptions, details, page: location.href, title: document.title };
 }
 function gradezyPreviewFill(records) {
   if (!Array.isArray(records) || !records.length || records.length > 1000) throw Error("Provide 1–1000 grade records.");
   const plan = gradezyBuildFillPlan(records);
   const token = crypto.randomUUID();
-  gradezyPendingFill = { token, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade) })), timestamp: Date.now(), page: plan.page, title: plan.title };
-  return { token, summary: plan.outcome, exceptions: plan.exceptions, count: records.length };
+  gradezyPendingFill = { token, source: records.map(r => ({ ncgId: normaliseId(r.ncgId), grade: gradezyGrade(r.grade),firstName:clean(r.firstName),lastName:clean(r.lastName) })), timestamp: Date.now(), page: plan.page, title: plan.title };
+  return { token, summary: plan.outcome, exceptions: plan.exceptions, details:plan.details, count: records.length };
 }
 function gradezyApplyFill(token) {
   if (!gradezyPendingFill || gradezyPendingFill.token !== token) throw Error("Preview is missing or out of date. Preview again.");
