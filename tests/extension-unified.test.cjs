@@ -129,3 +129,11 @@ test("0.00 replacement is separately reviewed and never assumed blank", () => {
   assert.match(src,/rec\.prior==="0\.00"/);
   assert.match(read("sidepanel.html"),/id="staffZeroReview"/);
 });
+
+test("StaffAdvantage attempt is selected explicitly and retained for apply", () => {
+  assert.match(read("sidepanel.html"),/id="staffAttempt"/);
+  const content=read("content.js");
+  assert.match(content,/if\(attemptNumber && cellValue\(cells\[columns\.attempt\]\)!==attemptNumber\)continue/);
+  assert.match(content,/const attemptNumber=gradezyPendingFill\.attemptNumber/);
+  assert.match(read("sidepanel.js"),/attemptNumber:\$\("staffAttempt"\)\.value/);
+});
