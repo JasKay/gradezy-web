@@ -285,6 +285,23 @@ test("Moodle exports can be selected by campus and merged in session", () => {
   assert.match(panel,/turnitinId:turnitin>=0/);
 });
 
+test("Turnitin XLS endpoint is treated as Moodle rather than unsupported", () => {
+  const src=read("sidepanel.js");
+  const detect=isolated(src,"function detect(t)","async function refreshSummary()","detect",
+    `const norm=v=>String(v||"").toLowerCase();
+const URL=function(value){const parsed=/^https?:\\/\\/([^/]+)(\\/[^?]*)?/.exec(value);return {hostname:parsed[1],pathname:parsed[2]||"/"};};`);
+  assert.equal(detect({url:"https://api.turnitinuk.com/api/lti/1p0/download/xls"}),"moodle");
+  assert.equal(detect({url:"https://portal.esl.ac.uk/moodle/mod/turnitintooltwo/view.php"}),"moodle");
+});
+
+test("Moodle workspace exposes focused download and merge panes", () => {
+  const html=read("sidepanel.html"),src=read("sidepanel.js");
+  for(const id of ["moodleDownloadPane","moodleMergePane","moodleMergedPreview","moodleToTracker","moodleAddCampus"])
+    assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(src,/function setMoodleStep\(step\)/);
+  assert.match(src,/setMoodleStep\("merge"\)/);
+});
+
 test("Stage 2 automatically checks the active StaffAdvantage page", () => {
   const src=read("sidepanel.js");
   assert.match(src,/await autoMatchStaffPage\(\);/);
