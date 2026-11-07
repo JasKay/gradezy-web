@@ -5,6 +5,7 @@ let system = "other";
 let exportRows = null;
 let pendingGradePreview = null;
 let gradeWorkbook = null;
+let matchDetails = [];
 let gradeFlowStep = "upload";
 let gradezySelectedWorkflow = null;
 function setGradeStep(step) {
@@ -393,7 +394,7 @@ function refreshGradePreview() {
   ["NCG ID","First name","Last name","Grade"].forEach(label=>{const th=document.createElement("th");th.textContent=label;head.append(th);});
   const thead=document.createElement("thead");thead.append(head);table.append(thead);
   const body=document.createElement("tbody");
-  rows.slice(0,30).forEach(row=>{const tr=document.createElement("tr");indices.forEach(i=>{const td=document.createElement("td");td.textContent=i>=0?text(row[i]):"—";tr.append(td);});body.append(tr);});
+  rows.slice(0,$("showAllGrades").checked?1000:30).forEach(row=>{const tr=document.createElement("tr");indices.forEach(i=>{const td=document.createElement("td");td.textContent=i>=0?text(row[i]):"—";tr.append(td);});body.append(tr);});
   table.append(body);wrapper.append(table);
   $("stageGrades").disabled=indices[0]<0||indices[3]<0||indices[0]===indices[3]||rows.length===0||rows.length>1000;
 }
@@ -438,32 +439,36 @@ async function stageGradeFile() {
 }
 async function previewGradeFill() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
-  if(!$("staffAttempt").value)throw Error("Choose the assessment attempt first.");
   const state = await chrome.storage.session.get("gradezyGradeData");
   const batch = state.gradezyGradeData;
   if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
-  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked,attemptNumber:$("staffAttempt").value});
+  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked});
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
   const exceptions=counts.missing+counts.duplicate+counts.nameMismatch+counts.conflict+counts.readonly+counts.invalid+counts.zeroReview;
-  $("matchSummary").textContent=`${counts.ready} ready · ${counts.identical} already entered · ${exceptions} need attention`;
-  const wrapper=$("matchPreview");wrapper.replaceChildren();
-  const table=document.createElement("table");const head=document.createElement("thead");const row=document.createElement("tr");
-  ["NCG ID","Student","Grade","Status"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
-  const body=document.createElement("tbody");
-  for(const match of (result.data.details||[]).slice(0,80)){
-    const tr=document.createElement("tr");
-    [match.ncgId,match.staffName||`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
-  }
-  table.append(body);wrapper.append(table);
+  const matched=counts.ready+counts.zeroReview+counts.identical+counts.conflict+counts.readonly+counts.nameMismatch;
+  $("matchSummary").textContent=`${matched} IDs matched · ${counts.ready} ready · ${counts.zeroReview} at 0.00 (approval needed) · ${exceptions} need attention`;
+  matchDetails=result.data.details||[];
+  renderMatchPreview();
   $("matchResults").hidden=false;
   $("toLive").disabled=counts.ready===0;
-  $("liveSummary").textContent=`${counts.ready} grades ready to fill · Attempt ${$("staffAttempt").value}`;
+  $("liveSummary").textContent=`${counts.ready} grades ready to fill`;
   hidePreview();
   $("applyGrades").dataset.hasReady=counts.ready>0?"yes":"no";
   $("applyGrades").hidden = !counts.ready || !$("staffReview").checked;
   status("");
+}
+function renderMatchPreview() {
+  const wrapper=$("matchPreview");wrapper.replaceChildren();
+  const table=document.createElement("table");const head=document.createElement("thead");const row=document.createElement("tr");
+  ["NCG ID","Student","Grade","Status"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
+  const body=document.createElement("tbody");
+  for(const match of matchDetails.slice(0,$("showAllMatches").checked?1000:30)){
+    const tr=document.createElement("tr");
+    [match.ncgId,match.staffName||`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
+  }
+  table.append(body);wrapper.append(table);
 }
 async function applyGradeFill() {
   if (system !== "staff" || !tab?.id || tab.id !== pendingGradePreview?.tabId) throw Error("The preview is no longer valid.");
@@ -496,6 +501,8 @@ $("staffFile").addEventListener("change", () => action(inspectGradeFile));
 $("gradeSheet").addEventListener("change", renderGradeFile);
 $("gradeHeaderRow").addEventListener("change",renderGradeColumns);
 for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLastColumn"])$(id).addEventListener("change",refreshGradePreview);
+$("showAllGrades").addEventListener("change",refreshGradePreview);
+$("showAllMatches").addEventListener("change",renderMatchPreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("startMatch").addEventListener("click", () => action(async () => {
   $("matchResults").hidden=true;
@@ -511,7 +518,6 @@ $("backToMatch").addEventListener("click",()=>setGradeStep("match"));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
 $("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
 $("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("matchResults").hidden=true;$("applyGrades").hidden=true;status("");});
-$("staffAttempt").addEventListener("change", () => {pendingGradePreview=null;$("matchResults").hidden=true;$("applyGrades").hidden=true;status("");});
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
