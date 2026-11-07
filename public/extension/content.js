@@ -85,6 +85,60 @@ function gradezyStudentRows(table) {
       /\b\d{6,12}\b/.test(cellDetails(cells[columns.details]));
   });
 }
+function gradezyVisualEntries() {
+  // Visual WebGUI renders each student ID as an independent label (SPAN) and
+  // their Percentage as a separate input. They need not share a TABLE/TR.
+  const spans=[...document.querySelectorAll("span")].filter(el=>/^\d{6,12}$/.test(clean(el.textContent)));
+  const inputs=[...document.querySelectorAll("input[type='text'],input[type='number']")].filter(el=>
+    /^(?:\d{1,3}(?:\.\d{1,2})?)?$/.test(String(el.value||"").trim()) &&
+    el.id!=="VWG_LabelEditorInput" && !el.disabled);
+  const used=new Set(), entries=[];
+  for(const span of spans){
+    const idRect=span.getBoundingClientRect();
+    if(!idRect.width||!idRect.height)continue;
+    const candidates=inputs.map(input=>{
+      const box=input.getBoundingClientRect();
+      // ID is underneath the name; the percentage box is above/right of ID.
+      const vertical=(box.top+box.bottom)/2-(idRect.top+idRect.bottom)/2;
+      const horizontal=box.left-idRect.right;
+      return {input,box,vertical,horizontal,distance:Math.abs(vertical)*3+horizontal*.12};
+    }).filter(c=>c.box.width>20 && c.box.height>8 && c.horizontal>15 &&
+      c.horizontal<900 && c.vertical>-90 && c.vertical<18).sort((a,b)=>a.distance-b.distance);
+    if(!candidates.length)continue;
+    const candidate=candidates[0];
+    // Equally plausible neighbouring inputs are unsafe to assign automatically.
+    if(candidates[1] && Math.abs(candidates[1].distance-candidate.distance)<8)continue;
+    if(used.has(candidate.input))continue;
+    used.add(candidate.input);
+    const ncgId=clean(span.textContent);
+    const nearby=[...document.querySelectorAll("span")].filter(el=>{
+      if(el===span||!clean(el.textContent)||/\d{6,12}/.test(el.textContent))return false;
+      const b=el.getBoundingClientRect();
+      return b.width>0 && Math.abs(b.left-idRect.left)<45 && b.bottom<=idRect.top+8 && b.bottom>=idRect.top-70;
+    }).sort((a,b)=>b.getBoundingClientRect().bottom-a.getBoundingClientRect().bottom);
+    const name=clean(nearby[0]?.textContent||"");
+    const student=parseStudentDetails(name?`${name}\n${ncgId}`:ncgId,{getAttribute:()=>null,dataset:{}});
+    entries.push({student,input:candidate.input,grade:candidate.input.value,row:null});
+  }
+  return entries;
+}
+function gradezyGridEntries(){
+  const visual=gradezyVisualEntries();
+  const table=findStaffAdvantageTable();
+  if(table){
+    const columns=columnMap(table);
+    if(columns.details!==undefined && columns.grade!==undefined){
+      const rows=gradezyStudentRows(table).map(row=>{
+        const cells=gradezyRowCells(row);
+        return {student:parseStudentDetails(cellDetails(cells[columns.details]),row),
+          input:cells[columns.grade]?.querySelector("input[type='number'],input[type='text'],input:not([type]),textarea"),
+          grade:cellValue(cells[columns.grade]),row};
+      });
+      if(rows.length>=visual.length && rows.some(entry=>entry.input))return rows;
+    }
+  }
+  return visual;
+}
 function parseStudentDetails(value, row) {
   const text = clean(value);
   const lines = String(value ?? "").split(/\n+/).map(clean).filter(Boolean);
@@ -107,25 +161,13 @@ function isChecked(cells, index) {
   return Boolean(control?.checked || /^(?:yes|true|y|1)$/i.test(cellValue(cell)));
 }
 function extractStaffAdvantageStudents() {
-  const table = findStaffAdvantageTable();
-  if (!table) return [];
-  const columns = columnMap(table);
-  if (columns.details === undefined || columns.grade === undefined) return [];
   const seen = new Set();
-  return gradezyStudentRows(table).map((row) => {
-    const cells = gradezyRowCells(row);
-    if (cells.length <= Math.max(columns.details, columns.grade)) return null;
-    const student = parseStudentDetails(cellDetails(cells[columns.details]), row);
+  return gradezyGridEntries().map(({student,grade}) => {
     const key = `${student.ncgId}|${student.firstName}|${student.lastName}`.toLowerCase();
     if ((!student.ncgId && !student.firstName && !student.lastName) || seen.has(key)) return null;
     seen.add(key);
     return {
-      ...student, grade: cellValue(cells[columns.grade]), source: "StaffAdvantage",
-      flags: {
-        trueZero: isChecked(cells, columns.trueZero), late: isChecked(cells, columns.late),
-        dns: isChecked(cells, columns.dns), aap: isChecked(cells, columns.aap),
-        mit: isChecked(cells, columns.mit), rpl: isChecked(cells, columns.rpl),
-      },
+      ...student, grade, source: "StaffAdvantage", flags: {},
     };
   }).filter(Boolean);
 }
@@ -140,6 +182,7 @@ function gradezyScanDiagnostics() {
     tableCount: tables.length,
     matchedTable: Boolean(table),
     matchedRows: table?gradezyStudentRows(table).length:0,
+    visualRows: gradezyVisualEntries().length,
     // Header labels only. Never expose student names/IDs in diagnostics.
     headers: tables.slice(0, 8).map(t => gradezyRowCells(gradezyHeaderRow(t)||t.querySelector("tr")||t)
       .slice(0, 15).map(h => clean(h.innerText || h.textContent))),
@@ -174,23 +217,22 @@ function gradezyGrade(value) {
 function gradezyName(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function gradezyNameMatches(excelName, staffName) {
   if (!excelName) return true;
+  // If VWG exposes only the NCG ID label, exact ID still establishes identity.
+  if (!staffName) return true;
   const expected=gradezyName(excelName), displayed=gradezyName(staffName);
   if (!expected || !displayed) return false;
   // A visibly truncated label is acceptable only as a prefix after exact NCG ID match.
   return /\.{2,}|…/.test(staffName) ? displayed.length>=3 && expected.startsWith(displayed) : expected===displayed;
 }
 function gradezyBuildFillPlan(records, allowDefaultZero=false) {
-  const table = findStaffAdvantageTable();
-  if (!table) throw Error("StaffAdvantage assessment table is not visible.");
-  const columns = columnMap(table);
-  if (columns.details === undefined || columns.grade === undefined) throw Error("Could not identify student and percentage columns.");
+  const entries=gradezyGridEntries();
+  if(!entries.length)throw Error("StaffAdvantage student rows not detected.");
   const targetRows = new Map();
-  for (const [index, row] of gradezyStudentRows(table).entries()) {
-    const cells = gradezyRowCells(row);
-    const id = parseStudentDetails(cellDetails(cells[columns.details]), row).ncgId;
+  for (const [index, entry] of entries.entries()) {
+    const id=entry.student.ncgId;
     if (!id) continue;
     const existing = targetRows.get(id) || [];
-    existing.push({ index, row, cells, student:parseStudentDetails(cellDetails(cells[columns.details]),row) });
+    existing.push({ index, row:entry.row, input:entry.input, student:entry.student });
     targetRows.set(id, existing);
   }
   const sourceCounts = new Map();
@@ -212,8 +254,7 @@ function gradezyBuildFillPlan(records, allowDefaultZero=false) {
     else if (!gradezyNameMatches(rec.firstName,matches[0].student.firstName) ||
              !gradezyNameMatches(rec.lastName,matches[0].student.lastName)) reason="nameMismatch";
     else {
-      const match = matches[0], cell = match.cells[columns.grade];
-      const input = cell?.querySelector("input[type='number'],input[type='text'],input:not([type]),textarea");
+      const match = matches[0], input=match.input;
       if (!input || input.disabled || input.readOnly) reason = "readonly";
       else {
         const existing = String(input.value ?? "").trim();
