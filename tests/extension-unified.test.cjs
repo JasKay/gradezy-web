@@ -137,12 +137,32 @@ test("StaffAdvantage blue header is recognised without a THEAD", () => {
   const src=read("content.js");
   const helpers=isolated(src,"function headerKey(","function parseStudentDetails(","({findStaffAdvantageTable,columnMap,gradezyStudentRows})",
     `const clean=v=>String(v??"").replace(/\\s+/g," ").trim();
+const cellDetails=cell=>cell?.innerText||"";
 const headerCells=["Student Details","Attempt Number","Percentage","True Zero"].map(text=>({innerText:text,colSpan:1}));
-const studentCells=["Bunda, Iulian-Silviu\\n2341580","1","0.00",""] .map(text=>({innerText:text,colSpan:1}));
+const studentCells=["Bunda, Iulian-Silviu\\n2341580","1","0.00",""] .map((text,index)=>({innerText:text,colSpan:1,querySelector:()=>index===2?{}:null}));
 const header={querySelectorAll:()=>headerCells};
 const student={querySelectorAll:()=>studentCells};
 const table={querySelectorAll:selector=>selector==="tr"?[header,student]:[]};
 const document={querySelectorAll:selector=>selector==="table"?[table]:[]};`);
+  const table=helpers.findStaffAdvantageTable();
+  assert.ok(table);
+  assert.equal(helpers.columnMap(table).details,0);
+  assert.equal(helpers.columnMap(table).grade,2);
+  assert.equal(helpers.gradezyStudentRows(table).length,1);
+});
+
+test("StaffAdvantage headerless grid is found by NCG ID and adjacent grade input", () => {
+  const src=read("content.js");
+  const helpers=isolated(src,"function headerKey(","function parseStudentDetails(","({findStaffAdvantageTable,columnMap,gradezyStudentRows})",
+    `const clean=v=>String(v??"").replace(/\\s+/g," ").trim();
+const cellDetails=cell=>cell?.innerText||"";
+const headerCells=["Student Details","Attempt Number","Percentage"].map(text=>({innerText:text,colSpan:1,querySelector:()=>null}));
+const cells=["Bunda, Iulian-Silviu\\n2341580","1","0.00"].map((text,index)=>({innerText:text,colSpan:1,querySelector:()=>index===2?{}:null}));
+const header={querySelectorAll:()=>headerCells};
+const student={querySelectorAll:()=>cells};
+const headerOnly={querySelectorAll:selector=>selector==="tr"?[header]:[]};
+const grid={querySelectorAll:selector=>selector==="tr"?[student]:[]};
+const document={querySelectorAll:selector=>selector==="table"?[headerOnly,grid]:[]};`);
   const table=helpers.findStaffAdvantageTable();
   assert.ok(table);
   assert.equal(helpers.columnMap(table).details,0);
