@@ -356,6 +356,14 @@ async function readStaff() {
 }
 function selectedGradeSheet() { return gradeWorkbook?.sheets[Number($("gradeSheet").value)]; }
 function selectedGradeRows(){const sheet=selectedGradeSheet();const index=Number($("gradeHeaderRow").value)||0;return {headers:sheet?.allRows[index]||[],rows:sheet?.allRows.slice(index+1)||[]};}
+function gradezyExtractScoredRows(rows,idCol,gradeCol,firstCol=-1,lastCol=-1) {
+  return rows.map(row=>({
+    ncgId:text(row[idCol]).replace(/\.0$/, ""),
+    grade:text(row[gradeCol]),
+    firstName:firstCol>=0?text(row[firstCol]):"",
+    lastName:lastCol>=0?text(row[lastCol]):""
+  })).filter(record=>record.ncgId&&record.grade);
+}
 function gradeHeaderIndex(headers, candidates) {
   const values=headers.map(key);
   for(const candidate of candidates){const index=values.indexOf(candidate);if(index>=0)return index;}
@@ -426,7 +434,7 @@ async function stageGradeFile() {
   if(idCol<0||gradeCol<0||idCol===gradeCol)throw Error("Select distinct NCG ID and Grade columns.");
   const rows=selectedGradeRows().rows;
   if(rows.length>1000)throw Error("Maximum 1000 grade rows per reviewed batch.");
-  const records=rows.map(row=>({ncgId:text(row[idCol]).replace(/\.0$/, ""),grade:text(row[gradeCol]),firstName:firstCol>=0?text(row[firstCol]):"",lastName:lastCol>=0?text(row[lastCol]):""})).filter(record=>record.ncgId&&record.grade);
+  const records=gradezyExtractScoredRows(rows,idCol,gradeCol,firstCol,lastCol);
   if (!records.length) throw Error("No NCG IDs with grades found.");
   await chrome.storage.session.set({gradezyGradeData:{worksheet:sheet.name,records,savedAt:Date.now()}});
   pendingGradePreview = null;
