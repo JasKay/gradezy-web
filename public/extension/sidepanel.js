@@ -12,10 +12,20 @@ let staffFrameId = 0;
 let staffFrameTabId = null;
 let staffScanIssue = "";
 let gradeFlowStep = "upload";
+let moodleFlowStep = "download";
 let gradezySelectedWorkflow = null;
+function setMoodleStep(step){
+  moodleFlowStep=step;
+  $("moodleDownloadPane").hidden=step!=="download";
+  $("moodleMergePane").hidden=step!=="merge";
+  $("gradeFlowSteps").hidden=gradezySelectedWorkflow!=="moodle";
+  for(const [id,label] of [["stepUpload","1 Download"],["stepMatch","2 Merge"],["stepLive","3 Tracker"]])$(id).textContent=label;
+  for(const [id,active] of [["stepUpload",step==="download"],["stepMatch",step==="merge"],["stepLive",false]])$(id).classList.toggle("active",active);
+}
 function setGradeStep(step) {
   gradeFlowStep = step;
   const active = gradezySelectedWorkflow === "staff";
+  for(const [id,label] of [["stepUpload","1 Upload"],["stepMatch","2 Match"],["stepLive","3 Live"]])$(id).textContent=label;
   $("gradeFlowSteps").hidden = !active;
   $("gradeSection").hidden = !active || step !== "upload";
   $("staffSection").hidden = !active || step === "upload";
@@ -29,6 +39,10 @@ const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 function status(message, error = false) {
   $("status").textContent = message;
   $("status").classList.toggle("error", error);
+  if(gradezySelectedWorkflow==="moodle"){
+    $("moodleFeedback").textContent=message;
+    $("moodleFeedback").style.color=error?"#ac3931":"#356c50";
+  }
   const feedback=$("matchFeedback");
   if(feedback && gradezySelectedWorkflow==="staff" && gradeFlowStep==="match") {
     feedback.textContent=message;
@@ -78,7 +92,7 @@ function detect(t) {
   if (host === "staffadv.ncgrp.co.uk") return "staff";
   if (host.includes("excel.") || host === "excel.cloud.microsoft" || (host.includes("office.com") && (path.includes("excel") || title.includes("excel")))) return "excel";
   if (host.endsWith(".sharepoint.com")) return path.includes("/_layouts/15/doc.aspx") || title.includes("excel") ? "excel" : "tracker";
-  if (host.includes("moodle") || path.includes("/mod/turnitintool") || path.includes("/mod/assign/") || path.includes("/grade/report/") || title.includes("moodle")) return "moodle";
+  if (host.includes("moodle") || (host==="api.turnitinuk.com" && path.startsWith("/api/lti/1p0/download/")) || path.includes("/moodle/") || path.includes("/mod/turnitintool") || path.includes("/mod/assign/") || path.includes("/grade/report/") || title.includes("moodle")) return "moodle";
   return "other";
 }
 async function refreshSummary() {
@@ -231,11 +245,12 @@ function findMoodleRecords(tables) {
     const first=findIndex(t.headers,["firstname","forename"]);
     const last=findIndex(t.headers,["lastname","surname"]);
     const turnitin=findIndex(t.headers,["turnitinuserid","turnitinid"]);
+    const grade=findIndex(t.headers,["grade","finalgrade","mark","score"]);
     if (e < 0 || p < 0) continue;
     const records = t.rows.map((row) => ({
       email: norm(row[e]), paper: text(row[p]), similarity: sim >= 0 ? text(row[sim]) : "",
       ncgId:ncg>=0?text(row[ncg]):"",firstName:first>=0?text(row[first]):"",lastName:last>=0?text(row[last]):"",
-      turnitinId:turnitin>=0?text(row[turnitin]):""
+      turnitinId:turnitin>=0?text(row[turnitin]):"",grade:grade>=0?text(row[grade]):""
     })).filter(record => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email) && record.paper);
     if (records.length) return records;
   }
@@ -339,6 +354,23 @@ async function readXlsx(file) {
 async function fileTable(inputId) {
   const file = $(inputId).files?.[0];
   if (!file) throw Error("Choose an Excel, CSV or TSV file first.");
+  if(/\.xls$/i.test(file.name)){
+    const bytes=new Uint8Array(await file.slice(0,8).arrayBuffer());
+    if(bytes[0]===0xd0 && bytes[1]===0xcf)throw Error("This is a legacy binary .xls file. Save a copy as .xlsx or CSV before importing.");
+    const raw=await file.text();
+    if(/<table\b/i.test(raw)){
+      const doc=new DOMParser().parseFromString(raw,"text/html");
+      const rows=[...doc.querySelectorAll("table tr")].map(tr=>[...tr.querySelectorAll("th,td")].map(cell=>text(cell.textContent))).filter(row=>row.some(Boolean));
+      const header=Math.max(0,rows.findIndex(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0));
+      if(rows.length>1)return {headers:rows[header],rows:rows.slice(header+1),allRows:rows};
+    }
+    if(/\t/.test(raw) && /\b(?:Paper ID|Turnitin User ID)\b/i.test(raw)){
+      const rows=parseDelimited(raw,"\t");
+      const header=Math.max(0,rows.findIndex(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0));
+      if(rows.length>1)return {headers:rows[header],rows:rows.slice(header+1),allRows:rows};
+    }
+    throw Error("This .xls export isn't readable yet. Save a copy as .xlsx or CSV, then import it.");
+  }
   if (/\.xlsx$/i.test(file.name)) {
     const workbook=await readXlsx(file);
     const first=workbook.sheets.find(s=>s.allRows.some(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0))||workbook.sheets.find(s=>s.allRows.length>=2);
@@ -375,8 +407,26 @@ async function saveMoodle(records, source) {
   await chrome.storage.session.set({ gradezyMoodleRecords: { records: [...seen.values()], assessment, attempt, campuses, source, savedAt: Date.now() } });
   hidePreview();
   $("moodleCaptureSummary").textContent=`${seen.size} submissions · ${campuses.join(", ")}`;
+  renderMoodleMerge([...seen.values()],campuses);
+  setMoodleStep("merge");
   status("Saved " + seen.size + " Moodle records. Add another campus or move to SharePoint.");
   await refreshSummary();
+}
+function renderMoodleMerge(records,campuses){
+  $("moodleCaptureSummary").textContent=`${records.length} submissions · ${campuses.join(", ")}`;
+  const wrapper=$("moodleMergedPreview");wrapper.replaceChildren();
+  const table=document.createElement("table"),head=document.createElement("tr");
+  for(const title of ["Campus","NCG ID","Student","Turnitin ID","Paper ID","Grade"]){const cell=document.createElement("th");cell.textContent=title;head.append(cell);}
+  const thead=document.createElement("thead");thead.append(head);table.append(thead);
+  const body=document.createElement("tbody");
+  for(const record of records){
+    const tr=document.createElement("tr");
+    for(const value of [record.campus,record.ncgId,`${record.firstName||""} ${record.lastName||""}`.trim()||record.email,record.turnitinId,record.paper,record.grade]){
+      const cell=document.createElement("td");cell.textContent=value||"—";tr.append(cell);
+    }
+    body.append(tr);
+  }
+  table.append(body);wrapper.append(table);
 }
 function matchTracker(source, tables) {
   const updates = [], exceptions = [], messages = [];
@@ -390,7 +440,8 @@ function matchTracker(source, tables) {
     const sim = source.attempt === "resub"
       ? headers.findIndex(h => h.includes("resub") && h.includes("similarity"))
       : headers.findIndex(h => !h.includes("resub") && h.includes("similarity"));
-    return { t, e, paper, sim };
+    const turnitin = headers.findIndex(h=>["turnitinuserid","turnitinid","tiiuserid"].includes(h));
+    return { t, e, paper, sim, turnitin };
   }).filter(t => t.e >= 0 && t.paper >= 0);
   if (!candidates.length) throw Error("Cannot find a visible table with ESL Email and the selected attempt's Paper ID column. Use a Tracker CSV export.");
   const chosen = candidates[0], table = chosen.t;
@@ -405,10 +456,13 @@ function matchTracker(source, tables) {
     if (counts.get(email) !== 1) { exceptions.push("Row " + (i + 2) + ": duplicated tracker email"); continue; }
     const existing = text(row[chosen.paper]);
     if (existing && existing !== record.paper) { exceptions.push("Row " + (i + 2) + ": existing Paper ID differs"); continue; }
-    if (existing === record.paper) { unchanged++; continue; }
-    output[i + 1][chosen.paper] = record.paper;
+    const existingTii=chosen.turnitin>=0?text(row[chosen.turnitin]):"";
+    if(chosen.turnitin>=0 && record.turnitinId && existingTii && existingTii!==record.turnitinId){exceptions.push("Row " + (i + 2) + ": existing Turnitin ID differs");continue;}
+    if (existing === record.paper && (!record.turnitinId || chosen.turnitin<0 || existingTii===record.turnitinId)) { unchanged++; continue; }
+    if(!existing)output[i+1][chosen.paper]=record.paper;
+    if(chosen.turnitin>=0 && !existingTii && record.turnitinId)output[i+1][chosen.turnitin]=record.turnitinId;
     if (chosen.sim >= 0 && !text(row[chosen.sim]) && record.similarity) output[i + 1][chosen.sim] = record.similarity;
-    updates.push("Row " + (i + 2) + ": blank Paper ID → proposed update");
+    updates.push("Row " + (i + 2) + ": proposed identifier update");
   }
   messages.push("Assessment: " + source.assessment);
   messages.push("Attempt: " + (source.attempt === "resub" ? "Resubmission" : "First attempt"));
@@ -664,6 +718,8 @@ $("captureMoodle").addEventListener("click", () => action(async () => {
   await saveMoodle(findMoodleRecords(tables), tab?.url);
 }));
 $("findMoodleExports").addEventListener("click",()=>action(findMoodleExports));
+$("moodleAddCampus").addEventListener("click",()=>{setMoodleStep("download");$("moodleFile").value="";status("");});
+$("moodleToTracker").addEventListener("click",()=>{gradezyShowWorkflow("tracker");status("Open your Progress Tracker to review these stored submissions.");});
 $("importMoodle").addEventListener("click", () => action(async () => {
   validateScope();
   const table = await fileTable("moodleFile");
@@ -709,7 +765,7 @@ refreshTab().catch(e => status(e.message, true));
 /* User-selected workflow navigation. Site detection still controls access to live pages. */
 function gradezyShowWorkflow(which, preserveStep = false) {
   gradezySelectedWorkflow = which;
-  document.body.classList.toggle("grade-flow",which==="staff");
+  document.body.classList.toggle("grade-flow",which==="staff"||which==="moodle");
   for (const [id, value] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
     $(id)?.classList.toggle("selected", value === which);
   }
@@ -722,9 +778,16 @@ function gradezyShowWorkflow(which, preserveStep = false) {
   $("otherSection").querySelector("p").textContent = system === which || (which === "tracker" && system === "excel") ? "This workflow matches your current browser page. Use the tools above." : "Open the matching " + ({moodle:"Moodle",staff:"StaffAdvantage",tracker:"SharePoint"}[which]) + " page in a browser tab to use the live page tools.";
   if (system === which || (which === "tracker" && system === "excel")) $("otherSection").hidden = true;
   if(which==="staff")setGradeStep(preserveStep?gradeFlowStep:"upload");
+  else if(which==="moodle")setMoodleStep(preserveStep?moodleFlowStep:"download");
   else $("gradeFlowSteps").hidden=true;
   if(!preserveStep)status("");
 }
 for (const [id, systemName] of [["chooseMoodle","moodle"],["chooseStaff","staff"],["chooseTracker","tracker"]]) {
-  $(id)?.addEventListener("click", () => gradezyShowWorkflow(systemName));
+  $(id)?.addEventListener("click", async () => {
+    gradezyShowWorkflow(systemName);
+    if(systemName==="moodle"){
+      const saved=(await chrome.storage.session.get("gradezyMoodleRecords")).gradezyMoodleRecords;
+      if(saved?.records?.length){renderMoodleMerge(saved.records,saved.campuses||[]);setMoodleStep("merge");}
+    }
+  });
 }
