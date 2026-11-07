@@ -47,9 +47,13 @@ async function sendStaffMessage(request) {
 }
 async function findStaffGridFrame() {
   const results=await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},func:()=>{
-    return [...document.querySelectorAll("tr")].slice(0,100).some(row=>{
-      const labels=[...row.querySelectorAll(":scope > th, :scope > td")].map(cell=>(cell.innerText||cell.textContent||"").toLowerCase().replace(/\s+/g," "));
-      return labels.some(label=>label.includes("student")&&label.includes("detail")) && labels.some(label=>label.includes("percent"));
+    return [...document.querySelectorAll("tr")].slice(0,500).some(row=>{
+      const cells=[...row.querySelectorAll(":scope > th, :scope > td")];
+      const labels=cells.map(cell=>(cell.innerText||cell.textContent||"").toLowerCase().replace(/\s+/g," "));
+      const hasHeader=labels.some(label=>label.includes("student")&&label.includes("detail")) && labels.some(label=>label.includes("percent"));
+      const details=cells.findIndex(cell=>/\b\d{6,12}\b/.test(cell.innerText||cell.textContent||""));
+      const hasStudent=details>=0 && cells.some((cell,index)=>index>details && Boolean(cell.querySelector("input[type='number'],input[type='text'],input:not([type])")));
+      return hasHeader||hasStudent;
     });
   }});
   return results.find(entry=>entry.result===true)?.frameId??null;
