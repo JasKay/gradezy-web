@@ -109,7 +109,7 @@ async function refreshTab() {
   $("staffSection").hidden = system !== "staff";
   $("gradeSection").hidden = system !== "staff" && system !== "excel";
   pendingGradePreview = null;
-  $("applyGrades").hidden = true;
+  $("applyGrades").disabled = true;
   $("otherSection").hidden = system !== "other";
   if (gradezySelectedWorkflow) gradezyShowWorkflow(gradezySelectedWorkflow, true);
   await refreshSummary();
@@ -547,11 +547,12 @@ async function previewGradeFill() {
   matchDetails=result.data.details||[];
   renderMatchPreview();
   $("matchResults").hidden=false;
-  $("toLive").disabled=counts.ready===0;
-  $("liveSummary").textContent=`${counts.ready} grades ready to fill`;
+  $("toLive").disabled=matched===0;
+  $("liveSummary").textContent=`${matched} IDs matched · ${counts.ready} ready · ${counts.zeroReview} at 0.00`;
   hidePreview();
   $("applyGrades").dataset.hasReady=counts.ready>0?"yes":"no";
-  $("applyGrades").hidden = !counts.ready || !$("staffReview").checked;
+  $("applyGrades").disabled = !counts.ready || !$("staffReview").checked;
+  $("applyGrades").textContent=`Go Live · Fill ${counts.ready} grades`;
   status("");
 }
 function renderMatchPreview() {
@@ -572,7 +573,7 @@ async function applyGradeFill() {
   if (!$("staffReview").checked) throw Error("Reconfirm the assessment before populating.");
   const result = await sendStaffMessage({action:"applyStaffAdvantageFill",token:pendingGradePreview.token});
   pendingGradePreview = null;
-  $("applyGrades").hidden = true;
+  $("applyGrades").disabled = true;
   if (!result?.success) throw Error(result?.error || "Could not populate grade fields.");
   const counts = result.data;
   $("liveSummary").textContent=`${counts.populated} filled · ${counts.skipped} skipped · ${counts.failed} failed. Check StaffAdvantage.`;
@@ -602,15 +603,16 @@ $("showAllGrades").addEventListener("change",refreshGradePreview);
 $("matchSearch").addEventListener("input",renderMatchPreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("startMatch").addEventListener("click", () => action(runStaffMatch));
-$("toLive").addEventListener("click",()=>{if(!pendingGradePreview)return status("Start Match again.",true);$("staffReview").checked=false;$("applyGrades").hidden=true;setGradeStep("live");});
+$("toLive").addEventListener("click",()=>{if(!pendingGradePreview)return status("Start Match again.",true);$("staffReview").checked=false;$("applyGrades").disabled=true;setGradeStep("live");});
 $("backToUpload").addEventListener("click",()=>setGradeStep("upload"));
 $("backToMatch").addEventListener("click",()=>setGradeStep("match"));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
-$("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
+$("staffReview").addEventListener("change", () => {$("applyGrades").disabled=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
 $("staffZeroReview").addEventListener("change", () => {
-  pendingGradePreview=null;$("applyGrades").hidden=true;$("toLive").disabled=true;
+  pendingGradePreview=null;$("applyGrades").disabled=true;
+  $("staffReview").checked=false;
   $("matchSummary").textContent="Checking matches…";
-  action(runStaffMatch);
+  action(previewGradeFill);
 });
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
