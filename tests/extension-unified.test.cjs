@@ -246,6 +246,15 @@ test("grade matching uses NCG ID without an attempt selector", () => {
   assert.doesNotMatch(content,/attemptNumber/);
 });
 
+test("matching can progress to Live before 0.00 replacement is approved", () => {
+  const panel=read("sidepanel.js");
+  const html=read("sidepanel.html");
+  assert.match(panel,/\$\("toLive"\)\.disabled=matched===0/);
+  assert.match(html,/id="staffLivePane"[\s\S]*id="staffZeroReview"/);
+  assert.match(html,/id="applyGrades"[^>]*disabled>Go Live/);
+  assert.match(panel,/\$\("applyGrades"\)\.disabled = !counts\.ready \|\| !\$\("staffReview"\)\.checked/);
+});
+
 test("Stage 2 automatically checks the active StaffAdvantage page", () => {
   const src=read("sidepanel.js");
   assert.match(src,/await autoMatchStaffPage\(\);/);
