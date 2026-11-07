@@ -190,3 +190,11 @@ test("grade matching uses NCG ID without an attempt selector", () => {
   assert.match(read("sidepanel.js"),/for\(const match of filtered\)/);
   assert.doesNotMatch(content,/attemptNumber/);
 });
+
+test("Stage 2 automatically checks the active StaffAdvantage page", () => {
+  const src=read("sidepanel.js");
+  assert.match(src,/await autoMatchStaffPage\(\);/);
+  assert.match(src,/async function autoMatchStaffPage\(\)/);
+  assert.match(src,/await runStaffMatch\(\);/);
+  assert.match(src,/if\(gradezySelectedWorkflow!=="staff" \|\| gradeFlowStep!=="match"/);
+});
