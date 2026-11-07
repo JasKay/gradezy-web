@@ -47,7 +47,7 @@ async function sendStaffMessage(request) {
 }
 async function findStaffGridFrame() {
   const results=await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},func:()=>{
-    return [...document.querySelectorAll("tr")].slice(0,500).some(row=>{
+    const gridRows=[...document.querySelectorAll("tr")].slice(0,500).some(row=>{
       const cells=[...row.querySelectorAll(":scope > th, :scope > td")];
       const labels=cells.map(cell=>(cell.innerText||cell.textContent||"").toLowerCase().replace(/\s+/g," "));
       const hasHeader=labels.some(label=>label.includes("student")&&label.includes("detail")) && labels.some(label=>label.includes("percent"));
@@ -55,8 +55,11 @@ async function findStaffGridFrame() {
       const hasStudent=details>=0 && cells.some((cell,index)=>index>details && Boolean(cell.querySelector("input[type='number'],input[type='text'],input:not([type])")));
       return hasHeader||hasStudent;
     });
+    const visual=[...document.querySelectorAll("span")].some(el=>/^\d{6,12}$/.test((el.textContent||"").trim())) &&
+      [...document.querySelectorAll("input[type='text'],input[type='number']")].some(el=>/^\d{1,3}(?:\.\d{1,2})?$/.test(el.value||""));
+    return visual?2:gridRows?1:0;
   }});
-  return results.find(entry=>entry.result===true)?.frameId??null;
+  return results.sort((a,b)=>b.result-a.result).find(entry=>entry.result>0)?.frameId??null;
 }
 function hidePreview() {
   $("preview").hidden = true;
@@ -405,7 +408,9 @@ async function readStaff() {
   if (!students.length) {
     const diagnostics = await sendStaffMessage({action:"diagnoseStaffAdvantageScan"});
     const d = diagnostics?.data || {};
-    staffScanIssue=d.matchedTable
+    staffScanIssue=d.visualRows
+      ? `Visual grade rows detected (${d.visualRows}), but no student records parsed.`
+      : d.matchedTable
       ? `Grade table found, but no student rows parsed (${d.matchedRows??0} rows).`
       : `Grade table header not detected (${d.tableCount??0} tables, ${d.frameCount??0} frames).`;
     setPreview([
@@ -413,6 +418,7 @@ async function readStaff() {
       "Tables found: " + (d.tableCount ?? "unknown"),
       "Assessment table recognised: " + (d.matchedTable ? "yes" : "no"),
       "Rows in assessment table: " + (d.matchedRows ?? 0),
+      "Visual rows detected: " + (d.visualRows ?? 0),
       "Frames on page: " + (d.frameCount ?? "unknown"),
       "Table headers: " + (d.headers || []).map(h => h.join(" | ")).filter(Boolean).join(" / "),
       "",
