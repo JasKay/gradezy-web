@@ -255,6 +255,36 @@ test("matching can progress to Live before 0.00 replacement is approved", () => 
   assert.match(panel,/\$\("applyGrades"\)\.disabled = !counts\.ready \|\| !\$\("staffReview"\)\.checked/);
 });
 
+test("header detection finds NCG ID and grade on later worksheet rows", () => {
+  const panel=read("sidepanel.js");
+  const detect=isolated(panel,"function gradezyFindHeaderRow(","function renderGradeColumns(","gradezyFindHeaderRow",
+    `const key=value=>String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const gradeHeaderIndex=(row,candidates)=>row.findIndex(value=>candidates.includes(key(value)));`);
+  assert.equal(detect([["Marks 2026"],["For campus"],["NCG ID","ESL ID","First Name","Final Grade"],["2341580","x","Iulian",62]]),2);
+});
+
+test("Match shows only identified StaffAdvantage students", () => {
+  const panel=read("sidepanel.js");
+  assert.match(panel,/NCG ID not on this page\|Invalid grade or NCG ID\|Duplicate NCG ID/);
+});
+
+test("Live supports a one-time guarded restore of grades", () => {
+  const content=read("content.js"),html=read("sidepanel.html"),panel=read("sidepanel.js");
+  assert.match(content,/function gradezyUndoLastFill\(/);
+  assert.match(content,/gradezyGrade\(input\.value\)!==after/);
+  assert.match(html,/id="undoGrades"[^>]*hidden>Undo last fill/);
+  assert.match(panel,/action:\s*"undoStaffAdvantageFill"/);
+});
+
+test("Moodle exports can be selected by campus and merged in session", () => {
+  const html=read("sidepanel.html"),panel=read("sidepanel.js");
+  for(const campus of ["Leeds","Birmingham","Northampton","Leicester"])assert.match(html,new RegExp(campus));
+  assert.match(html,/id="findMoodleExports"/);
+  assert.match(panel,/const saved=\(await chrome\.storage\.session\.get\("gradezyMoodleRecords"\)\)/);
+  assert.match(panel,/campuses=\[\.\.\.new Set/);
+  assert.match(panel,/turnitinId:turnitin>=0/);
+});
+
 test("Stage 2 automatically checks the active StaffAdvantage page", () => {
   const src=read("sidepanel.js");
   assert.match(src,/await autoMatchStaffPage\(\);/);
