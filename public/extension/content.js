@@ -208,6 +208,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 /* Reviewed grade-entry adapter. Exact NCG ID only, never clicks Save or Submit. */
 let gradezyPendingFill = null;
+let gradezyLastFill = null;
 function gradezyGrade(value) {
   const raw = String(value ?? "").trim().replace(/%$/, "");
   if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw)) return null;
@@ -291,6 +292,7 @@ function gradezyApplyFill(token) {
   gradezyPendingFill = null; // one-time authorisation
   const updatedPlan = gradezyBuildFillPlan(records,allowDefaultZero);
   const results = { populated: 0, skipped: records.length - updatedPlan.approved.length, failed: 0 };
+  const applied=[];
   for (const rec of updatedPlan.approved) {
     try {
       const current=String(rec.input.value??"").trim();
@@ -300,18 +302,38 @@ function gradezyApplyFill(token) {
       else rec.input.value = rec.grade;
       rec.input.dispatchEvent(new Event("input", { bubbles: true }));
       rec.input.dispatchEvent(new Event("change", { bubbles: true }));
-      if (gradezyGrade(rec.input.value) === rec.grade) results.populated++;
+      if (gradezyGrade(rec.input.value) === rec.grade) {
+        results.populated++;
+        applied.push({input:rec.input,before:current,after:rec.grade});
+      }
       else results.failed++;
     } catch { results.failed++; }
   }
+  gradezyLastFill=applied.length?{page:location.href,items:applied}:null;
   return results;
 }
+function gradezyUndoLastFill(){
+  if(!gradezyLastFill || gradezyLastFill.page!==location.href)throw Error("No fill from this page is available to undo.");
+  const {items}=gradezyLastFill;gradezyLastFill=null;
+  const result={restored:0,skipped:0};
+  for(const {input,before,after} of items){
+    if(!input.isConnected || gradezyGrade(input.value)!==after){result.skipped++;continue;}
+    try{
+      const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")?.set;
+      if(setter)setter.call(input,before);else input.value=before;
+      input.dispatchEvent(new Event("input",{bubbles:true}));
+      input.dispatchEvent(new Event("change",{bubbles:true}));
+      if(String(input.value)===before)result.restored++;else result.skipped++;
+    }catch{result.skipped++;}
+  }
+  return result;
+}
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-  if (request.action !== "previewStaffAdvantageFill" && request.action !== "applyStaffAdvantageFill") return;
+  if (!["previewStaffAdvantageFill","applyStaffAdvantageFill","undoStaffAdvantageFill"].includes(request.action)) return;
   try {
     const data = request.action === "previewStaffAdvantageFill"
       ? gradezyPreviewFill(request.records,Boolean(request.allowDefaultZero))
-      : gradezyApplyFill(request.token);
+      : request.action === "applyStaffAdvantageFill" ? gradezyApplyFill(request.token) : gradezyUndoLastFill();
     sendResponse({ success: true, data });
   } catch (error) {
     sendResponse({ success: false, error: String(error?.message || error) });
