@@ -8,6 +8,9 @@ let gradeWorkbook = null;
 let matchDetails = [];
 let matchingInProgress = false;
 let lastAutoMatchKey = "";
+let staffFrameId = 0;
+let staffFrameTabId = null;
+let staffScanIssue = "";
 let gradeFlowStep = "upload";
 let gradezySelectedWorkflow = null;
 function setGradeStep(step) {
@@ -34,12 +37,22 @@ function status(message, error = false) {
   }
 }
 async function sendStaffMessage(request) {
-  try { return await chrome.tabs.sendMessage(tab.id,request); }
+  const options={frameId:staffFrameTabId===tab.id?staffFrameId:0};
+  try { return await chrome.tabs.sendMessage(tab.id,request,options); }
   catch(error) {
     if(!/Receiving end does not exist|Could not establish connection/i.test(String(error?.message||error)))throw error;
-    await chrome.scripting.executeScript({target:{tabId:tab.id},files:["content.js"]});
-    return chrome.tabs.sendMessage(tab.id,request);
+    await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[options.frameId]},files:["content.js"]});
+    return chrome.tabs.sendMessage(tab.id,request,options);
   }
+}
+async function findStaffGridFrame() {
+  const results=await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},func:()=>{
+    return [...document.querySelectorAll("tr")].slice(0,100).some(row=>{
+      const labels=[...row.querySelectorAll(":scope > th, :scope > td")].map(cell=>(cell.innerText||cell.textContent||"").toLowerCase().replace(/\s+/g," "));
+      return labels.some(label=>label.includes("student")&&label.includes("detail")) && labels.some(label=>label.includes("percent"));
+    });
+  }});
+  return results.find(entry=>entry.result===true)?.frameId??null;
 }
 function hidePreview() {
   $("preview").hidden = true;
@@ -77,6 +90,7 @@ async function refreshSummary() {
 async function refreshTab() {
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   tab = tabs[0] || null;
+  if(tab?.id!==staffFrameTabId){staffFrameId=0;staffFrameTabId=tab?.id??null;}
   system = detect(tab);
   const labels = { moodle: "Moodle", tracker: "SharePoint", excel: "Excel Online", staff: "StaffAdvantage", other: "Other page" };
   $("siteLabel").textContent = labels[system];
@@ -104,7 +118,7 @@ async function runStaffMatch() {
     if(system!=="staff" || !tab?.id)throw Error("Open the StaffAdvantage grade page to match.");
     status("Matching NCG IDs…");
     const found=await readStaff();
-    if(!found)throw Error("No students found in the StaffAdvantage grade table.");
+    if(!found)throw Error(staffScanIssue||"No students found in the StaffAdvantage grade table.");
     await previewGradeFill();
   } catch(error) {status(error?.message||"Could not match StaffAdvantage",true);throw error;}
   finally { matchingInProgress = false; }
@@ -370,13 +384,26 @@ function downloadCsv() {
 }
 async function readStaff() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
-  const response = await sendStaffMessage({ action: "readStaffAdvantageStudents" });
+  staffScanIssue="";
+  let response = await sendStaffMessage({ action: "readStaffAdvantageStudents" });
+  if(!response?.data?.students?.length){
+    try {
+      const frame=await findStaffGridFrame();
+      if(frame!==null && frame!==staffFrameId){
+        staffFrameId=frame;staffFrameTabId=tab.id;
+        response=await sendStaffMessage({action:"readStaffAdvantageStudents"});
+      }
+    }catch{/* Keep the original read-only result; diagnostics below explain the failure. */}
+  }
   if (!response?.success) throw Error(response?.error || "Could not read StaffAdvantage. Refresh the page and try again.");
   const students = response.data?.students || [];
   await chrome.storage.session.set({gradezyStaffSnapshot:{count:students.length,savedAt:Date.now()}});
   if (!students.length) {
     const diagnostics = await sendStaffMessage({action:"diagnoseStaffAdvantageScan"});
     const d = diagnostics?.data || {};
+    staffScanIssue=d.matchedTable
+      ? `Grade table found, but no student rows parsed (${d.matchedRows??0} rows).`
+      : `Grade table header not detected (${d.tableCount??0} tables, ${d.frameCount??0} frames).`;
     setPreview([
       "No StaffAdvantage students detected — diagnostic scan",
       "Tables found: " + (d.tableCount ?? "unknown"),
@@ -388,7 +415,7 @@ async function readStaff() {
       "Open the assessment's student grid (not the class landing page), wait for the rows to load, then scan again.",
       "If the rows are visible but still not detected, share only the diagnostic text above (no student records)."
     ].join("\n"));
-    status("No students found. See the diagnostic details below.", true);
+    status(staffScanIssue,true);
     await refreshSummary();
     return 0;
   }
