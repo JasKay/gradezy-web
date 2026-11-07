@@ -6,6 +6,8 @@ let exportRows = null;
 let pendingGradePreview = null;
 let gradeWorkbook = null;
 let matchDetails = [];
+let matchingInProgress = false;
+let lastAutoMatchKey = "";
 let gradeFlowStep = "upload";
 let gradezySelectedWorkflow = null;
 function setGradeStep(step) {
@@ -76,6 +78,28 @@ async function refreshTab() {
   $("otherSection").hidden = system !== "other";
   if (gradezySelectedWorkflow) gradezyShowWorkflow(gradezySelectedWorkflow, true);
   await refreshSummary();
+  await autoMatchStaffPage();
+}
+async function runStaffMatch() {
+  if (matchingInProgress) return;
+  matchingInProgress = true;
+  try {
+    if(system!=="staff" || !tab?.id)throw Error("Open the StaffAdvantage grade page to match.");
+    const found=await readStaff();
+    if(!found)throw Error("No students found in the StaffAdvantage grade table.");
+    await previewGradeFill();
+  } finally { matchingInProgress = false; }
+}
+async function autoMatchStaffPage() {
+  if(gradezySelectedWorkflow!=="staff" || gradeFlowStep!=="match" || system!=="staff" || matchingInProgress)return;
+  const state=await chrome.storage.session.get("gradezyGradeData");
+  const batch=state.gradezyGradeData;
+  if(!batch?.records?.length)return;
+  const key=`${tab.id}:${batch.savedAt}:${$("staffZeroReview").checked}`;
+  if(key===lastAutoMatchKey)return;
+  lastAutoMatchKey=key;
+  try { await runStaffMatch(); }
+  catch(error){$("matchSummary").textContent=error?.message||"Could not match StaffAdvantage";}
 }
 async function requestSiteAccess() {
   if (!tab?.id || !tab.url) throw Error("Open a supported browser tab first.");
@@ -438,6 +462,7 @@ async function stageGradeFile() {
   if (!records.length) throw Error("No NCG IDs with grades found.");
   await chrome.storage.session.set({gradezyGradeData:{worksheet:sheet.name,records,savedAt:Date.now()}});
   pendingGradePreview = null;
+  lastAutoMatchKey="";
   $("matchSourceSummary").textContent=`${records.length} grades from ${sheet.name}`;
   matchDetails=records.map(record=>({...record,status:"Awaiting match",staffName:""}));
   $("matchSearch").value="";
@@ -449,6 +474,7 @@ async function stageGradeFile() {
   setGradeStep("match");
   status("");
   await refreshSummary();
+  await autoMatchStaffPage();
 }
 async function previewGradeFill() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
@@ -519,19 +545,17 @@ for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLas
 $("showAllGrades").addEventListener("change",refreshGradePreview);
 $("matchSearch").addEventListener("input",renderMatchPreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
-$("startMatch").addEventListener("click", () => action(async () => {
-  await refreshTab();
-  if(system!=="staff")throw Error("Open the StaffAdvantage grade page, then Start Match.");
-  const found=await readStaff();
-  if(!found)throw Error("No students found in the StaffAdvantage grade table.");
-  await previewGradeFill();
-}));
+$("startMatch").addEventListener("click", () => action(runStaffMatch));
 $("toLive").addEventListener("click",()=>{if(!pendingGradePreview)return status("Start Match again.",true);$("staffReview").checked=false;$("applyGrades").hidden=true;setGradeStep("live");});
 $("backToUpload").addEventListener("click",()=>setGradeStep("upload"));
 $("backToMatch").addEventListener("click",()=>setGradeStep("match"));
 $("previewGrades").addEventListener("click", () => action(previewGradeFill));
 $("staffReview").addEventListener("change", () => {$("applyGrades").hidden=!pendingGradePreview || !$("staffReview").checked || $("applyGrades").dataset.hasReady!=="yes";});
-$("staffZeroReview").addEventListener("change", () => {pendingGradePreview=null;$("matchResults").hidden=true;$("applyGrades").hidden=true;status("");});
+$("staffZeroReview").addEventListener("change", () => {
+  pendingGradePreview=null;$("applyGrades").hidden=true;$("toLive").disabled=true;
+  $("matchSummary").textContent="Checking matches…";
+  action(runStaffMatch);
+});
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
