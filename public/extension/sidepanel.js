@@ -431,7 +431,12 @@ async function stageGradeFile() {
   await chrome.storage.session.set({gradezyGradeData:{worksheet:sheet.name,records,savedAt:Date.now()}});
   pendingGradePreview = null;
   $("matchSourceSummary").textContent=`${records.length} grades from ${sheet.name}`;
-  $("matchResults").hidden=true;
+  matchDetails=records.map(record=>({...record,status:"Awaiting match",staffName:""}));
+  $("matchSearch").value="";
+  $("matchSummary").textContent=`${records.length} Excel scores loaded`;
+  renderMatchPreview();
+  $("matchResults").hidden=false;
+  $("toLive").disabled=true;
   $("staffReview").checked=false;
   setGradeStep("match");
   status("");
@@ -462,11 +467,13 @@ async function previewGradeFill() {
 function renderMatchPreview() {
   const wrapper=$("matchPreview");wrapper.replaceChildren();
   const table=document.createElement("table");const head=document.createElement("thead");const row=document.createElement("tr");
-  ["NCG ID","Student","Grade","Status"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
+  ["NCG ID","Excel student","Excel score","Match"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
   const body=document.createElement("tbody");
-  for(const match of matchDetails.slice(0,$("showAllMatches").checked?1000:30)){
+  const query=text($("matchSearch").value).toLowerCase();
+  const filtered=matchDetails.filter(match=>`${match.ncgId} ${match.firstName} ${match.lastName}`.toLowerCase().includes(query));
+  for(const match of filtered){
     const tr=document.createElement("tr");
-    [match.ncgId,match.staffName||`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
+    [match.ncgId,`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
   }
   table.append(body);wrapper.append(table);
 }
@@ -502,10 +509,9 @@ $("gradeSheet").addEventListener("change", renderGradeFile);
 $("gradeHeaderRow").addEventListener("change",renderGradeColumns);
 for(const id of ["gradeIdColumn","gradeValueColumn","gradeFirstColumn","gradeLastColumn"])$(id).addEventListener("change",refreshGradePreview);
 $("showAllGrades").addEventListener("change",refreshGradePreview);
-$("showAllMatches").addEventListener("change",renderMatchPreview);
+$("matchSearch").addEventListener("input",renderMatchPreview);
 $("stageGrades").addEventListener("click", () => action(stageGradeFile));
 $("startMatch").addEventListener("click", () => action(async () => {
-  $("matchResults").hidden=true;
   await refreshTab();
   if(system!=="staff")throw Error("Open the StaffAdvantage grade page, then Start Match.");
   const found=await readStaff();
