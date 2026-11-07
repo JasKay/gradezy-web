@@ -17,7 +17,7 @@ function findStaffAdvantageTable() {
   return [...document.querySelectorAll("table")].find((table) => {
     const headings = headerKey(table.querySelector("thead")?.innerText || table.querySelector("thead")?.textContent ||
       [...table.querySelectorAll("tr")].slice(0, 2).map(row => row.textContent).join(" "));
-    return headings.includes("attempt") && headings.includes("percentage") && (headings.includes("student") || headings.includes("details"));
+    return headings.includes("percentage") && (headings.includes("student") || headings.includes("details"));
   }) || null;
 }
 function columnMap(table) {
@@ -25,7 +25,6 @@ function columnMap(table) {
   [...table.querySelectorAll("thead th, thead td")].forEach((header, index) => {
     const label = headerKey(header.innerText || header.textContent);
     if (label.includes("student") || label.includes("details")) map.details = index;
-    if (label.includes("attempt")) map.attempt = index;
     if (label.includes("percentage") || label.includes("percent")) map.grade = index;
     if (label.includes("true zero")) map.trueZero = index;
     if (label === "late" || label.includes(" late")) map.late = index;
@@ -67,12 +66,11 @@ function extractStaffAdvantageStudents() {
     const cells = [...row.querySelectorAll(":scope > td")];
     if (cells.length <= Math.max(columns.details, columns.grade)) return null;
     const student = parseStudentDetails(cellDetails(cells[columns.details]), row);
-    const key = `${student.ncgId}|${student.firstName}|${student.lastName}|${cellValue(cells[columns.attempt])}`.toLowerCase();
+    const key = `${student.ncgId}|${student.firstName}|${student.lastName}`.toLowerCase();
     if ((!student.ncgId && !student.firstName && !student.lastName) || seen.has(key)) return null;
     seen.add(key);
     return {
       ...student, grade: cellValue(cells[columns.grade]), source: "StaffAdvantage",
-      attemptNumber: cellValue(cells[columns.attempt]),
       flags: {
         trueZero: isChecked(cells, columns.trueZero), late: isChecked(cells, columns.late),
         dns: isChecked(cells, columns.dns), aap: isChecked(cells, columns.aap),
