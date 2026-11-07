@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gradezy — Assessment Companion",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "One local assessment workspace for Moodle, Excel, SharePoint and StaffAdvantage.",
   "permissions": [
     "scripting",
