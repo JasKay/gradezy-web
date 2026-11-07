@@ -141,5 +141,8 @@ test("grade matching uses NCG ID without an attempt selector", () => {
   const content=read("content.js");
   assert.doesNotMatch(content,/if\(attemptNumber &&/);
   assert.match(content,/ID matched · 0\.00 needs approval/);
-  assert.match(read("sidepanel.html"),/id="showAllMatches"/);
+  assert.match(read("sidepanel.html"),/id="matchSearch"/);
+  assert.match(read("sidepanel.js"),/matchDetails=records\.map\(record=>/);
+  assert.match(read("sidepanel.js"),/for\(const match of filtered\)/);
+  assert.doesNotMatch(content,/attemptNumber/);
 });
