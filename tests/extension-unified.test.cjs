@@ -170,6 +170,21 @@ const document={querySelectorAll:selector=>selector==="table"?[headerOnly,grid]:
   assert.equal(helpers.gradezyStudentRows(table).length,1);
 });
 
+test("Visual WebGUI spans match Percentage inputs by on-screen row", () => {
+  const src=read("content.js");
+  const scan=isolated(src,"function gradezyVisualEntries(","function gradezyGridEntries(","gradezyVisualEntries",
+    `const clean=v=>String(v??"").replace(/\\s+/g," ").trim();
+const parseStudentDetails=(value)=>({ncgId:value.match(/2341580/)?.[0],firstName:"Iulian-Silviu",lastName:"Bunda"});
+const span={textContent:"2341580",getBoundingClientRect:()=>({left:110,right:170,top:310,bottom:325,width:60,height:15})};
+const input={id:"UDB_Input_951",value:"0.00",disabled:false,getBoundingClientRect:()=>({left:405,right:530,top:272,bottom:298,width:125,height:26})};
+const name={textContent:"Bunda, Iulian-Silviu",getBoundingClientRect:()=>({left:108,right:260,top:275,bottom:292,width:152,height:17})};
+const document={querySelectorAll:selector=>selector==="span"?[span,name]:selector.startsWith("input")?[input]:[]};`);
+  const result=scan();
+  assert.equal(result.length,1);
+  assert.equal(result[0].student.ncgId,"2341580");
+  assert.equal(result[0].grade,"0.00");
+});
+
 test("truncated StaffAdvantage names are checked as prefixes after ID matching", () => {
   const src=read("content.js");
   const matches=isolated(src,"function gradezyName(","function gradezyBuildFillPlan(","gradezyNameMatches",
@@ -188,6 +203,7 @@ const gradezyName=v=>clean(v).toLowerCase().replace(/[^a-z0-9]/g,"");
 const gradezyNameMatches=(a,b)=>!a||gradezyName(a)===gradezyName(b);
 const parseStudentDetails=()=>({ncgId:"2341580",firstName:"Iulian-Silviu",lastName:"Bunda"});
 const input={value:"0.00",disabled:false,readOnly:false};
+const gradezyGridEntries=()=>[{student:{ncgId:"2341580",firstName:"Iulian-Silviu",lastName:"Bunda"},input,row:null}];
 const cells=[{innerText:"Bunda, Iulian-Silviu\\n2341580"},{querySelector:()=>input}];
 const row={querySelectorAll:()=>cells};
 const table={querySelectorAll:()=>[row]};
