@@ -13,16 +13,26 @@ function cellDetails(cell) {
   return cell.innerText || cell.textContent || "";
 }
 function headerKey(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " "); }
-function findStaffAdvantageTable() {
-  return [...document.querySelectorAll("table")].find((table) => {
-    const headings = headerKey(table.querySelector("thead")?.innerText || table.querySelector("thead")?.textContent ||
-      [...table.querySelectorAll("tr")].slice(0, 2).map(row => row.textContent).join(" "));
-    return headings.includes("percentage") && (headings.includes("student") || headings.includes("details"));
+function gradezyRowCells(row) {
+  return [...row.querySelectorAll(":scope > th, :scope > td")];
+}
+function gradezyHeaderRow(table) {
+  // UNITe/StaffAdvantage sometimes renders the blue header using TDs in TBODY,
+  // without a THEAD. Find it by the two visible column names.
+  return [...table.querySelectorAll("tr")].slice(0,12).find(row => {
+    const labels=gradezyRowCells(row).map(cell=>headerKey(cell.innerText||cell.textContent));
+    return labels.some(label=>label.includes("student")&&label.includes("detail")) &&
+      labels.some(label=>label.includes("percentage")||label.includes("percent"));
   }) || null;
+}
+function findStaffAdvantageTable() {
+  return [...document.querySelectorAll("table")].find(gradezyHeaderRow) || null;
 }
 function columnMap(table) {
   const map = {};
-  [...table.querySelectorAll("thead th, thead td")].forEach((header, index) => {
+  const headerRow=gradezyHeaderRow(table);
+  let index=0;
+  for (const header of headerRow ? gradezyRowCells(headerRow) : []) {
     const label = headerKey(header.innerText || header.textContent);
     if (label.includes("student") || label.includes("details")) map.details = index;
     if (label.includes("percentage") || label.includes("percent")) map.grade = index;
@@ -32,8 +42,13 @@ function columnMap(table) {
     if (label.includes("aap")) map.aap = index;
     if (label.includes("mit")) map.mit = index;
     if (label.includes("rpl")) map.rpl = index;
-  });
+    index += Math.max(1,Number(header.colSpan)||1);
+  }
   return map;
+}
+function gradezyStudentRows(table) {
+  const header=gradezyHeaderRow(table);
+  return [...table.querySelectorAll("tr")].filter(row=>row!==header && gradezyRowCells(row).length>=2);
 }
 function parseStudentDetails(value, row) {
   const text = clean(value);
@@ -62,8 +77,8 @@ function extractStaffAdvantageStudents() {
   const columns = columnMap(table);
   if (columns.details === undefined || columns.grade === undefined) return [];
   const seen = new Set();
-  return [...table.querySelectorAll("tbody tr")].map((row) => {
-    const cells = [...row.querySelectorAll(":scope > td")];
+  return gradezyStudentRows(table).map((row) => {
+    const cells = gradezyRowCells(row);
     if (cells.length <= Math.max(columns.details, columns.grade)) return null;
     const student = parseStudentDetails(cellDetails(cells[columns.details]), row);
     const key = `${student.ncgId}|${student.firstName}|${student.lastName}`.toLowerCase();
@@ -89,9 +104,9 @@ function gradezyScanDiagnostics() {
   return {
     tableCount: tables.length,
     matchedTable: Boolean(table),
-    matchedRows: table?.querySelectorAll("tbody tr").length || 0,
+    matchedRows: table?gradezyStudentRows(table).length:0,
     // Header labels only. Never expose student names/IDs in diagnostics.
-    headers: tables.slice(0, 8).map(t => [...t.querySelectorAll("thead th, thead td")]
+    headers: tables.slice(0, 8).map(t => gradezyRowCells(gradezyHeaderRow(t)||t.querySelector("tr")||t)
       .slice(0, 15).map(h => clean(h.innerText || h.textContent))),
     frameCount: document.querySelectorAll("iframe").length,
     urlPath: location.pathname,
@@ -135,8 +150,8 @@ function gradezyBuildFillPlan(records, allowDefaultZero=false) {
   const columns = columnMap(table);
   if (columns.details === undefined || columns.grade === undefined) throw Error("Could not identify student and percentage columns.");
   const targetRows = new Map();
-  for (const [index, row] of [...table.querySelectorAll("tbody tr")].entries()) {
-    const cells = [...row.querySelectorAll(":scope > td")];
+  for (const [index, row] of gradezyStudentRows(table).entries()) {
+    const cells = gradezyRowCells(row);
     const id = parseStudentDetails(cellDetails(cells[columns.details]), row).ncgId;
     if (!id) continue;
     const existing = targetRows.get(id) || [];
