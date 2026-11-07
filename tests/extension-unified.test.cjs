@@ -198,3 +198,12 @@ test("Stage 2 automatically checks the active StaffAdvantage page", () => {
   assert.match(src,/await runStaffMatch\(\);/);
   assert.match(src,/if\(gradezySelectedWorkflow!=="staff" \|\| gradeFlowStep!=="match"/);
 });
+
+test("match failures are visible and a missing StaffAdvantage scanner is reattached", () => {
+  const html=read("sidepanel.html"), src=read("sidepanel.js");
+  assert.match(html,/id="matchFeedback"/);
+  assert.match(src,/feedback\.textContent=message/);
+  assert.match(src,/Receiving end does not exist/);
+  assert.match(src,/chrome\.scripting\.executeScript\(\{target:\{tabId:tab\.id\},files:\["content\.js"\]\}\)/);
+  assert.match(src,/await sendStaffMessage\(\{action:"previewStaffAdvantageFill"/);
+});
