@@ -133,6 +133,23 @@ test("StaffAdvantage surname-first rows retain the NCG ID beneath the name", () 
   assert.equal(bunda.firstName,"Iulian-Silviu");
 });
 
+test("StaffAdvantage blue header is recognised without a THEAD", () => {
+  const src=read("content.js");
+  const helpers=isolated(src,"function headerKey(","function parseStudentDetails(","({findStaffAdvantageTable,columnMap,gradezyStudentRows})",
+    `const clean=v=>String(v??"").replace(/\\s+/g," ").trim();
+const headerCells=["Student Details","Attempt Number","Percentage","True Zero"].map(text=>({innerText:text,colSpan:1}));
+const studentCells=["Bunda, Iulian-Silviu\\n2341580","1","0.00",""] .map(text=>({innerText:text,colSpan:1}));
+const header={querySelectorAll:()=>headerCells};
+const student={querySelectorAll:()=>studentCells};
+const table={querySelectorAll:selector=>selector==="tr"?[header,student]:[]};
+const document={querySelectorAll:selector=>selector==="table"?[table]:[]};`);
+  const table=helpers.findStaffAdvantageTable();
+  assert.ok(table);
+  assert.equal(helpers.columnMap(table).details,0);
+  assert.equal(helpers.columnMap(table).grade,2);
+  assert.equal(helpers.gradezyStudentRows(table).length,1);
+});
+
 test("truncated StaffAdvantage names are checked as prefixes after ID matching", () => {
   const src=read("content.js");
   const matches=isolated(src,"function gradezyName(","function gradezyBuildFillPlan(","gradezyNameMatches",
@@ -154,6 +171,8 @@ const input={value:"0.00",disabled:false,readOnly:false};
 const cells=[{innerText:"Bunda, Iulian-Silviu\\n2341580"},{querySelector:()=>input}];
 const row={querySelectorAll:()=>cells};
 const table={querySelectorAll:()=>[row]};
+const gradezyStudentRows=()=>[row];
+const gradezyRowCells=r=>r.querySelectorAll();
 const findStaffAdvantageTable=()=>table;
 const columnMap=()=>({details:0,grade:1});
 const cellDetails=c=>c.innerText;
@@ -204,6 +223,14 @@ test("match failures are visible and a missing StaffAdvantage scanner is reattac
   assert.match(html,/id="matchFeedback"/);
   assert.match(src,/feedback\.textContent=message/);
   assert.match(src,/Receiving end does not exist/);
-  assert.match(src,/chrome\.scripting\.executeScript\(\{target:\{tabId:tab\.id\},files:\["content\.js"\]\}\)/);
+  assert.match(src,/chrome\.scripting\.executeScript\(\{target:\{tabId:tab\.id,frameIds:\[options\.frameId\]\},files:\["content\.js"\]\}\)/);
   assert.match(src,/await sendStaffMessage\(\{action:"previewStaffAdvantageFill"/);
+});
+
+test("StaffAdvantage scanner finds assessment grids in embedded frames", () => {
+  const src=read("sidepanel.js");
+  assert.match(src,/async function findStaffGridFrame\(\)/);
+  assert.match(src,/allFrames:true/);
+  assert.match(src,/staffFrameId=frame/);
+  assert.match(src,/frameId:staffFrameTabId===tab\.id\?staffFrameId:0/);
 });
