@@ -97,6 +97,20 @@ test("grade import exposes sheet, header and column review before staging", () =
   assert.match(read("sidepanel.js"),/\$\("showAllGrades"\)\.checked\?1000:30/);
 });
 
+test("every scored Excel row reaches Match, including entries after preview row 30", () => {
+  const extract=isolated(read("sidepanel.js"),"function gradezyExtractScoredRows(","function gradeHeaderIndex(","gradezyExtractScoredRows",
+    'const text=v=>String(v??"").replace(/\\s+/g," ").trim();');
+  const rows=Array.from({length:144},(_,i)=>[String(2341000+i),`Student${i}`,`Surname${i}`,""]);
+  rows[70]=["2341580","Iulian-Silviu","Bunda","68"];
+  rows[90]=["2341520","Chanelle Catherine","Adams","40"];
+  rows[110]=["2341584","Eduard-Florian","Baetasu","57"];
+  const staged=extract(rows,0,3,1,2);
+  assert.equal(staged.length,3);
+  assert.deepEqual([...staged.map(r=>r.ncgId)], ["2341580","2341520","2341584"]);
+  assert.equal(staged[0].grade,"68");
+  assert.equal(staged[0].lastName,"Bunda");
+});
+
 test("grade fill checks supplied student names and preserves them through approval", () => {
   const src = read("content.js");
   assert.match(src, /reason="nameMismatch"/);
@@ -126,6 +140,36 @@ test("truncated StaffAdvantage names are checked as prefixes after ID matching",
   assert.equal(matches("Chanelle","Chanelle..."),true);
   assert.equal(matches("Chanelle","Charlotte..."),false);
   assert.equal(matches("Adams","Adams"),true);
+});
+
+test("Bunda's NCG ID and score match a 0.00 StaffAdvantage row before fill approval", () => {
+  const source=read("content.js");
+  const prefix=`const clean=v=>String(v??"").replace(/\\s+/g," ").trim();
+const normaliseId=v=>clean(v).replace(/\\s+/g,"");
+const gradezyGrade=v=>{const n=Number(v);return Number.isFinite(n)&&n>=0&&n<=100?n.toFixed(2):null;};
+const gradezyName=v=>clean(v).toLowerCase().replace(/[^a-z0-9]/g,"");
+const gradezyNameMatches=(a,b)=>!a||gradezyName(a)===gradezyName(b);
+const parseStudentDetails=()=>({ncgId:"2341580",firstName:"Iulian-Silviu",lastName:"Bunda"});
+const input={value:"0.00",disabled:false,readOnly:false};
+const cells=[{innerText:"Bunda, Iulian-Silviu\\n2341580"},{querySelector:()=>input}];
+const row={querySelectorAll:()=>cells};
+const table={querySelectorAll:()=>[row]};
+const findStaffAdvantageTable=()=>table;
+const columnMap=()=>({details:0,grade:1});
+const cellDetails=c=>c.innerText;
+const location={href:"https://staffadv.ncgrp.co.uk/test"};
+const document={title:"Sample assessment"};`;
+  const build=isolated(source,"function gradezyBuildFillPlan(","function gradezyPreviewFill(","gradezyBuildFillPlan",prefix);
+  // The mocked DOM is supplied as the lexical table binding in the isolated function.
+  const records=[{ncgId:"2341580",firstName:"Iulian-Silviu",lastName:"Bunda",grade:"68"}];
+  const result=build(records,false);
+  assert.equal(result.outcome.zeroReview,1);
+  assert.equal(result.outcome.missing,0);
+  assert.equal(result.details[0].grade,"68");
+  assert.match(result.details[0].status,/ID matched/);
+  const approved=build(records,true);
+  assert.equal(approved.outcome.ready,1);
+  assert.equal(approved.approved[0].grade,"68.00");
 });
 
 test("0.00 replacement is separately reviewed and never assumed blank", () => {
