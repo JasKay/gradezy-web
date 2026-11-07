@@ -85,7 +85,7 @@ async function refreshSummary() {
   const state = await chrome.storage.session.get(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
   const s = state.gradezyMoodleRecords;
   $("savedSummary").textContent = s?.records?.length
-    ? s.records.length + " Turnitin records · " + s.assessment + " · " + (s.attempt === "resub" ? "Resubmission" : "First attempt")
+    ? s.records.length + " Turnitin records · " + s.assessment + " · " + (s.campuses||[]).join(", ") + " · " + (s.attempt === "resub" ? "Resubmission" : "First attempt")
     : "No Moodle records captured this browser session.";
   $("staffSummary").textContent = state.gradezyStaffSnapshot
     ? state.gradezyStaffSnapshot.count + " StaffAdvantage students read this session."
@@ -176,6 +176,44 @@ async function visibleTables() {
   const result = await chrome.scripting.executeScript({ target: { tabId: id }, func: scanVisibleTables });
   return result?.[0]?.result || [];
 }
+function scanMoodleExports(){
+  const options=[...document.querySelectorAll("a,button,[role='button']")].filter(el=>{
+    const text=(el.textContent||"")+" "+(el.title||"")+" "+(el.getAttribute("href")||"")+" "+[...el.querySelectorAll("img")].map(img=>`${img.alt} ${img.src}`).join(" ");
+    return /excel|\.xlsx?\b|\bxls\b/i.test(text);
+  });
+  return options.slice(0,100).map((el,index)=>{
+    const row=el.closest("tr")||el.parentElement;
+    const title=(row?.innerText||row?.textContent||"").replace(/\s+/g," ").trim().slice(0,220);
+    const campus=title.match(/\b(Leeds|Birmingham|Northampton|Leicester)\b/i)?.[1]||"";
+    const module=title.match(/\b[A-Z]{2,5}\s?\d{3,5}\b/i)?.[0]||"";
+    return {index,title,campus,module};
+  });
+}
+async function findMoodleExports(){
+  if(system!=="moodle")throw Error("Open the Moodle assessment export page first.");
+  const id=await requestSiteAccess();
+  const result=await chrome.scripting.executeScript({target:{tabId:id},func:scanMoodleExports});
+  const exports=result?.[0]?.result||[];
+  const wrapper=$("moodleExports");wrapper.replaceChildren();
+  if(!exports.length){wrapper.textContent="No export links detected on this page.";return;}
+  for(const item of exports){
+    const row=document.createElement("div");row.className="row";
+    const label=document.createElement("span");label.textContent=`${item.module||"Module"} · ${item.campus||"Campus not detected"} · ${item.title.slice(0,60)}`;label.style.flex="3";
+    const button=document.createElement("button");button.textContent="Export";button.className="secondary";
+    button.addEventListener("click",()=>action(async()=>{
+      if(item.campus)$("moodleCampus").value=item.campus;
+      if(item.module&&!$("assessment").value)$("assessment").value=item.module;
+      await chrome.scripting.executeScript({target:{tabId:id},func:index=>{
+        const options=[...document.querySelectorAll("a,button,[role='button']")].filter(el=>{
+          const t=(el.textContent||"")+" "+(el.title||"")+" "+(el.getAttribute("href")||"")+" "+[...el.querySelectorAll("img")].map(img=>`${img.alt} ${img.src}`).join(" ");
+          return /excel|\.xlsx?\b|\bxls\b/i.test(t);
+        });
+        options[index]?.click();
+      },args:[item.index]});
+      status("Export requested. Once downloaded, add the file below for this campus.");
+    }));row.append(label,button);wrapper.append(row);
+  }
+}
 function findIndex(headers, candidates) {
   const h = headers.map(key);
   for (const option of candidates) {
@@ -189,9 +227,15 @@ function findMoodleRecords(tables) {
     const e = findIndex(t.headers, ["email", "emailaddress", "studentemail"]);
     const p = findIndex(t.headers, ["paperid", "turnitinpaperid", "tiipaperid"]);
     const sim = findIndex(t.headers, ["similarity", "similarityscore"]);
+    const ncg=findIndex(t.headers,["ncgid","ncgstudentid"]);
+    const first=findIndex(t.headers,["firstname","forename"]);
+    const last=findIndex(t.headers,["lastname","surname"]);
+    const turnitin=findIndex(t.headers,["turnitinuserid","turnitinid"]);
     if (e < 0 || p < 0) continue;
     const records = t.rows.map((row) => ({
-      email: norm(row[e]), paper: text(row[p]), similarity: sim >= 0 ? text(row[sim]) : ""
+      email: norm(row[e]), paper: text(row[p]), similarity: sim >= 0 ? text(row[sim]) : "",
+      ncgId:ncg>=0?text(row[ncg]):"",firstName:first>=0?text(row[first]):"",lastName:last>=0?text(row[last]):"",
+      turnitinId:turnitin>=0?text(row[turnitin]):""
     })).filter(record => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email) && record.paper);
     if (records.length) return records;
   }
@@ -297,14 +341,16 @@ async function fileTable(inputId) {
   if (!file) throw Error("Choose an Excel, CSV or TSV file first.");
   if (/\.xlsx$/i.test(file.name)) {
     const workbook=await readXlsx(file);
-    const first=workbook.sheets.find(s=>s.allRows.length>=2);
-    return {headers:first.allRows[0],rows:first.allRows.slice(1),allRows:first.allRows};
+    const first=workbook.sheets.find(s=>s.allRows.some(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0))||workbook.sheets.find(s=>s.allRows.length>=2);
+    const header=Math.max(0,first.allRows.findIndex(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0));
+    return {headers:first.allRows[header],rows:first.allRows.slice(header+1),allRows:first.allRows};
   }
   if (!/\.(csv|tsv)$/i.test(file.name)) throw Error("Choose a .xlsx, .csv or .tsv file.");
   if (file.size > 15 * 1024 * 1024) throw Error("File is larger than the 15 MB local import limit.");
   const rows = parseDelimited(await file.text(), /\.tsv$/i.test(file.name) ? "\t" : ",");
   if (rows.length < 2) throw Error("No data rows found.");
-  return { headers: rows[0], rows: rows.slice(1), allRows: rows };
+  const header=Math.max(0,rows.findIndex(row=>findIndex(row,["email","emailaddress","studentemail"])>=0 && findIndex(row,["paperid","turnitinpaperid","tiipaperid"])>=0));
+  return { headers: rows[header], rows: rows.slice(header+1), allRows: rows };
 }
 function validateScope() {
   const assessment = text($("assessment").value), attempt = $("attempt").value;
@@ -313,17 +359,23 @@ function validateScope() {
 }
 async function saveMoodle(records, source) {
   const { assessment, attempt } = validateScope();
+  const campus=$("moodleCampus").value;
+  if(!campus)throw Error("Choose the campus for these submissions.");
   if (!records.length) throw Error("No valid Email and Paper ID records were detected. Use the Turnitin CSV export if this page doesn't display them.");
-  const seen = new Map(), conflicts = [];
+  const saved=(await chrome.storage.session.get("gradezyMoodleRecords")).gradezyMoodleRecords;
+  if(saved?.records?.length && (saved.assessment!==assessment || saved.attempt!==attempt))throw Error("Another module or attempt is stored. Clear the session before starting a different assessment.");
+  const seen = new Map((saved?.records||[]).map(record=>[record.email,record])), conflicts = [];
   for (const record of records) {
     const before = seen.get(record.email);
     if (before && (before.paper !== record.paper || before.similarity !== record.similarity)) conflicts.push(record.email);
-    else seen.set(record.email, record);
+    else seen.set(record.email, {...record,campus:before?.campus||campus});
   }
   if (conflicts.length) throw Error("Capture cancelled: " + conflicts.length + " duplicate emails have conflicting Paper IDs or similarity values.");
-  await chrome.storage.session.set({ gradezyMoodleRecords: { records: [...seen.values()], assessment, attempt, source, savedAt: Date.now() } });
+  const campuses=[...new Set([...(saved?.campuses||[]),campus])];
+  await chrome.storage.session.set({ gradezyMoodleRecords: { records: [...seen.values()], assessment, attempt, campuses, source, savedAt: Date.now() } });
   hidePreview();
-  status("Saved " + seen.size + " Moodle records in temporary browser session storage. Switch to the SharePoint/Excel Tracker tab.");
+  $("moodleCaptureSummary").textContent=`${seen.size} submissions · ${campuses.join(", ")}`;
+  status("Saved " + seen.size + " Moodle records. Add another campus or move to SharePoint.");
   await refreshSummary();
 }
 function matchTracker(source, tables) {
@@ -459,9 +511,22 @@ function renderGradeFile() {
   const sheet=selectedGradeSheet(); if(!sheet)return;
   const headerSelect=$("gradeHeaderRow");headerSelect.replaceChildren();
   sheet.allRows.slice(0,20).forEach((row,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=`Row ${i+1}: ${row.slice(0,3).map(text).join(" · ").slice(0,70)}`;headerSelect.append(option);});
-  const best=sheet.allRows.slice(0,20).findIndex(row=>gradeHeaderIndex(row,["ncgid","ncgstudentid","studentid","studentnumber"])>=0);
+  const best=gradezyFindHeaderRow(sheet.allRows);
   headerSelect.value=String(best>=0?best:0);
   renderGradeColumns();
+}
+function gradezyFindHeaderRow(rows){
+  const idNames=["ncgid","ncgstudentid","studentid","studentnumber","ncgnumber"];
+  const gradeNames=["finalgrade","grade","grades","finalmark","percentage","mark","score"];
+  let best=-1,score=-1;
+  for(let i=0;i<Math.min(rows.length,50);i++){
+    const row=rows[i]||[];
+    const id=gradeHeaderIndex(row,idNames),grade=gradeHeaderIndex(row,gradeNames);
+    const name=gradeHeaderIndex(row,["firstname","forename","givenname","lastname","surname"]);
+    const points=(id>=0?4:0)+(grade>=0?3:0)+(name>=0?2:0);
+    if(points>score){score=points;best=i;}
+  }
+  return score>=4?best:0;
 }
 function renderGradeColumns(){
   const headers=selectedGradeRows().headers;
@@ -498,7 +563,7 @@ async function inspectGradeFile() {
   }else throw Error("Choose an Excel .xlsx, CSV or TSV file.");
   const select=$("gradeSheet");select.replaceChildren();
   gradeWorkbook.sheets.forEach((sheet,i)=>{const option=document.createElement("option");option.value=String(i);option.textContent=`${sheet.name} (${Math.max(0,sheet.allRows.length-1)} rows)`;select.append(option);});
-  const best=gradeWorkbook.sheets.findIndex(s=>gradeHeaderIndex(s.allRows[0]||[],["ncgid","ncgstudentid","studentid","studentnumber"])>=0);
+  const best=gradeWorkbook.sheets.findIndex(s=>gradeHeaderIndex(s.allRows[gradezyFindHeaderRow(s.allRows)]||[],["ncgid","ncgstudentid","studentid","studentnumber","ncgnumber"])>=0);
   select.value=String(best>=0?best:0);
   $("gradeImportOptions").hidden=false;renderGradeFile();
   status("");
@@ -561,7 +626,9 @@ function renderMatchPreview() {
   ["NCG ID","Excel student","Excel score","Match"].forEach(value=>{const cell=document.createElement("th");cell.textContent=value;row.append(cell);});head.append(row);table.append(head);
   const body=document.createElement("tbody");
   const query=text($("matchSearch").value).toLowerCase();
-  const filtered=matchDetails.filter(match=>`${match.ncgId} ${match.firstName} ${match.lastName}`.toLowerCase().includes(query));
+  const filtered=matchDetails.filter(match=>match.status &&
+    !/^(?:Awaiting match|NCG ID not on this page|Invalid grade or NCG ID|Duplicate NCG ID)$/.test(match.status) &&
+    `${match.ncgId} ${match.firstName} ${match.lastName}`.toLowerCase().includes(query));
   for(const match of filtered){
     const tr=document.createElement("tr");
     [match.ncgId,`${match.firstName||""} ${match.lastName||""}`.trim(),match.grade,match.status].forEach(value=>{const td=document.createElement("td");td.textContent=text(value);tr.append(td);});body.append(tr);
@@ -577,7 +644,16 @@ async function applyGradeFill() {
   if (!result?.success) throw Error(result?.error || "Could not populate grade fields.");
   const counts = result.data;
   $("liveSummary").textContent=`${counts.populated} filled · ${counts.skipped} skipped · ${counts.failed} failed. Check StaffAdvantage.`;
+  $("undoGrades").hidden=counts.populated===0;
   status("");
+}
+async function undoGradeFill(){
+  if(system!=="staff"||!tab?.id)throw Error("Open the original StaffAdvantage assessment page.");
+  const result=await sendStaffMessage({action:"undoStaffAdvantageFill"});
+  if(!result?.success)throw Error(result?.error||"Undo failed.");
+  $("liveSummary").textContent=`${result.data.restored} restored · ${result.data.skipped} skipped`;
+  $("undoGrades").hidden=true;
+  status("Original field values restored where unchanged. StaffAdvantage may autosave; verify the page.");
 }
 
 $("refresh").addEventListener("click", () => action(refreshTab));
@@ -587,6 +663,7 @@ $("captureMoodle").addEventListener("click", () => action(async () => {
   const tables = await visibleTables();
   await saveMoodle(findMoodleRecords(tables), tab?.url);
 }));
+$("findMoodleExports").addEventListener("click",()=>action(findMoodleExports));
 $("importMoodle").addEventListener("click", () => action(async () => {
   validateScope();
   const table = await fileTable("moodleFile");
@@ -615,6 +692,7 @@ $("staffZeroReview").addEventListener("change", () => {
   action(previewGradeFill);
 });
 $("applyGrades").addEventListener("click", () => action(applyGradeFill));
+$("undoGrades").addEventListener("click", () => action(undoGradeFill));
 $("downloadCsv").addEventListener("click", downloadCsv);
 $("clearData").addEventListener("click", () => action(async () => {
   await chrome.storage.session.remove(["gradezyMoodleRecords", "gradezyStaffSnapshot", "gradezyGradeData"]);
