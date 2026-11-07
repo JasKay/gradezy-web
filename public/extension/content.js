@@ -25,12 +25,40 @@ function gradezyHeaderRow(table) {
       labels.some(label=>label.includes("percentage")||label.includes("percent"));
   }) || null;
 }
+function gradezyInferColumns(table) {
+  // Headerless grid fallback: the NCG ID is printed below the name in one cell,
+  // and an editable numeric Percentage input sits farther right in the same row.
+  for (const row of [...table.querySelectorAll("tr")].slice(0,500)) {
+    const cells=gradezyRowCells(row);
+    const details=cells.findIndex(cell=>/\b\d{6,12}\b/.test(cellDetails(cell)));
+    if(details<0)continue;
+    const grade=cells.findIndex((cell,index)=>index>details && Boolean(cell.querySelector("input[type='number'],input[type='text'],input:not([type])")));
+    if(grade>=0)return {details,grade};
+  }
+  return null;
+}
 function findStaffAdvantageTable() {
-  return [...document.querySelectorAll("table")].find(gradezyHeaderRow) || null;
+  const tables=[...document.querySelectorAll("table")];
+  // On some UNITe screens the blue header and data rows are in different tables.
+  // Prefer the table with the most NCG-ID-plus-editable-grade rows, rather
+  // than a decorative/header-only table that happens to contain both labels.
+  let best=null,score=0;
+  for(const table of tables){
+    const map=gradezyInferColumns(table);
+    if(!map)continue;
+    const count=[...table.querySelectorAll("tr")].filter(row=>{
+      const cells=gradezyRowCells(row);
+      return /\b\d{6,12}\b/.test(cellDetails(cells[map.details])) &&
+        Boolean(cells[map.grade]?.querySelector("input[type='number'],input[type='text'],input:not([type])"));
+    }).length;
+    if(count>score){best=table;score=count;}
+  }
+  return best||tables.find(gradezyHeaderRow)||null;
 }
 function columnMap(table) {
   const map = {};
   const headerRow=gradezyHeaderRow(table);
+  if(!headerRow)return gradezyInferColumns(table)||map;
   let index=0;
   for (const header of headerRow ? gradezyRowCells(headerRow) : []) {
     const label = headerKey(header.innerText || header.textContent);
@@ -48,7 +76,14 @@ function columnMap(table) {
 }
 function gradezyStudentRows(table) {
   const header=gradezyHeaderRow(table);
-  return [...table.querySelectorAll("tr")].filter(row=>row!==header && gradezyRowCells(row).length>=2);
+  const columns=columnMap(table);
+  return [...table.querySelectorAll("tr")].filter(row=>{
+    if(row===header)return false;
+    const cells=gradezyRowCells(row);
+    return columns.details!==undefined && columns.grade!==undefined &&
+      cells.length>Math.max(columns.details,columns.grade) &&
+      /\b\d{6,12}\b/.test(cellDetails(cells[columns.details]));
+  });
 }
 function parseStudentDetails(value, row) {
   const text = clean(value);
