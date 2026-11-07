@@ -92,7 +92,9 @@ test("grade import exposes sheet, header and column review before staging", () =
     assert.match(html, new RegExp('id="' + id + '"'));
   }
   assert.match(read("sidepanel.js"), /gradeWorkbook\.sheets/);
-  assert.match(read("sidepanel.js"), /rows\.slice\(0,30\)/);
+  assert.match(read("sidepanel.js"), /rows\.slice\(0,\$\("showAllGrades"\)\.checked\?1000:30\)/);
+  assert.match(html,/id="showAllGrades"/);
+  assert.match(read("sidepanel.js"),/\$\("showAllGrades"\)\.checked\?1000:30/);
 });
 
 test("grade fill checks supplied student names and preserves them through approval", () => {
@@ -111,6 +113,10 @@ test("StaffAdvantage surname-first rows retain the NCG ID beneath the name", () 
   assert.equal(student.ncgId,"2341520");
   assert.equal(student.lastName,"Adams");
   assert.equal(student.firstName,"Chanelle...");
+  const bunda=parser("Bunda, Iulian-Silviu\n2341580",row);
+  assert.equal(bunda.ncgId,"2341580");
+  assert.equal(bunda.lastName,"Bunda");
+  assert.equal(bunda.firstName,"Iulian-Silviu");
 });
 
 test("truncated StaffAdvantage names are checked as prefixes after ID matching", () => {
@@ -130,10 +136,10 @@ test("0.00 replacement is separately reviewed and never assumed blank", () => {
   assert.match(read("sidepanel.html"),/id="staffZeroReview"/);
 });
 
-test("StaffAdvantage attempt is selected explicitly and retained for apply", () => {
-  assert.match(read("sidepanel.html"),/id="staffAttempt"/);
+test("grade matching uses NCG ID without an attempt selector", () => {
+  assert.doesNotMatch(read("sidepanel.html"),/id="staffAttempt"/);
   const content=read("content.js");
-  assert.match(content,/if\(attemptNumber && cellValue\(cells\[columns\.attempt\]\)!==attemptNumber\)continue/);
-  assert.match(content,/const attemptNumber=gradezyPendingFill\.attemptNumber/);
-  assert.match(read("sidepanel.js"),/attemptNumber:\$\("staffAttempt"\)\.value/);
+  assert.doesNotMatch(content,/if\(attemptNumber &&/);
+  assert.match(content,/ID matched · 0\.00 needs approval/);
+  assert.match(read("sidepanel.html"),/id="showAllMatches"/);
 });
