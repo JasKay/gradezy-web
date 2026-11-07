@@ -26,6 +26,20 @@ const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 function status(message, error = false) {
   $("status").textContent = message;
   $("status").classList.toggle("error", error);
+  const feedback=$("matchFeedback");
+  if(feedback && gradezySelectedWorkflow==="staff" && gradeFlowStep==="match") {
+    feedback.textContent=message;
+    feedback.hidden=!message;
+    feedback.style.color=error?"#ac3931":"#356c50";
+  }
+}
+async function sendStaffMessage(request) {
+  try { return await chrome.tabs.sendMessage(tab.id,request); }
+  catch(error) {
+    if(!/Receiving end does not exist|Could not establish connection/i.test(String(error?.message||error)))throw error;
+    await chrome.scripting.executeScript({target:{tabId:tab.id},files:["content.js"]});
+    return chrome.tabs.sendMessage(tab.id,request);
+  }
 }
 function hidePreview() {
   $("preview").hidden = true;
@@ -84,11 +98,16 @@ async function runStaffMatch() {
   if (matchingInProgress) return;
   matchingInProgress = true;
   try {
+    const tabs=await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    tab=tabs[0]||null;
+    system=detect(tab);
     if(system!=="staff" || !tab?.id)throw Error("Open the StaffAdvantage grade page to match.");
+    status("Matching NCG IDs…");
     const found=await readStaff();
     if(!found)throw Error("No students found in the StaffAdvantage grade table.");
     await previewGradeFill();
-  } finally { matchingInProgress = false; }
+  } catch(error) {status(error?.message||"Could not match StaffAdvantage",true);throw error;}
+  finally { matchingInProgress = false; }
 }
 async function autoMatchStaffPage() {
   if(gradezySelectedWorkflow!=="staff" || gradeFlowStep!=="match" || system!=="staff" || matchingInProgress)return;
@@ -99,7 +118,7 @@ async function autoMatchStaffPage() {
   if(key===lastAutoMatchKey)return;
   lastAutoMatchKey=key;
   try { await runStaffMatch(); }
-  catch(error){$("matchSummary").textContent=error?.message||"Could not match StaffAdvantage";}
+  catch(error){status(error?.message||"Could not match StaffAdvantage",true);}
 }
 async function requestSiteAccess() {
   if (!tab?.id || !tab.url) throw Error("Open a supported browser tab first.");
@@ -351,12 +370,12 @@ function downloadCsv() {
 }
 async function readStaff() {
   if (system !== "staff" || !tab?.id) throw Error("Open StaffAdvantage first.");
-  const response = await chrome.tabs.sendMessage(tab.id, { action: "readStaffAdvantageStudents" });
+  const response = await sendStaffMessage({ action: "readStaffAdvantageStudents" });
   if (!response?.success) throw Error(response?.error || "Could not read StaffAdvantage. Refresh the page and try again.");
   const students = response.data?.students || [];
   await chrome.storage.session.set({gradezyStaffSnapshot:{count:students.length,savedAt:Date.now()}});
   if (!students.length) {
-    const diagnostics = await chrome.tabs.sendMessage(tab.id, {action:"diagnoseStaffAdvantageScan"});
+    const diagnostics = await sendStaffMessage({action:"diagnoseStaffAdvantageScan"});
     const d = diagnostics?.data || {};
     setPreview([
       "No StaffAdvantage students detected — diagnostic scan",
@@ -481,7 +500,7 @@ async function previewGradeFill() {
   const state = await chrome.storage.session.get("gradezyGradeData");
   const batch = state.gradezyGradeData;
   if (!batch?.records?.length) throw Error("Stage an Excel/CSV grade file first.");
-  const result = await chrome.tabs.sendMessage(tab.id, {action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked});
+  const result = await sendStaffMessage({action:"previewStaffAdvantageFill",records:batch.records,allowDefaultZero:$("staffZeroReview").checked});
   if (!result?.success) throw Error(result?.error || "Could not preview grade matches.");
   const counts = result.data.summary;
   pendingGradePreview = {token:result.data.token,tabId:tab.id};
@@ -514,7 +533,7 @@ function renderMatchPreview() {
 async function applyGradeFill() {
   if (system !== "staff" || !tab?.id || tab.id !== pendingGradePreview?.tabId) throw Error("The preview is no longer valid.");
   if (!$("staffReview").checked) throw Error("Reconfirm the assessment before populating.");
-  const result = await chrome.tabs.sendMessage(tab.id, {action:"applyStaffAdvantageFill",token:pendingGradePreview.token});
+  const result = await sendStaffMessage({action:"applyStaffAdvantageFill",token:pendingGradePreview.token});
   pendingGradePreview = null;
   $("applyGrades").hidden = true;
   if (!result?.success) throw Error(result?.error || "Could not populate grade fields.");
